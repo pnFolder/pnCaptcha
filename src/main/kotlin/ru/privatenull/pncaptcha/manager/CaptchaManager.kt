@@ -37,20 +37,18 @@ class CaptchaManager(
     fun register(event: LoginLimboRegisterEvent) {
         val player = event.player
 
-        if (cache.isVerified(player)) {
-            return
-        }
+        if (cache.isVerified(player)) return
 
         if (!rateLimiter.allow(player.remoteAddress.address)) {
             event.addOnJoinCallback(Runnable {
-                player.disconnect(message("Too many connection attempts. Try again in a few seconds.", NamedTextColor.RED))
+                player.disconnect(message(config.messages.rateLimited, NamedTextColor.RED))
             })
             return
         }
 
         if (environment.activeCount() >= config.maxActiveCaptchas) {
             event.addOnJoinCallback(Runnable {
-                player.disconnect(message("CAPTCHA service is busy. Try again shortly.", NamedTextColor.RED))
+                player.disconnect(message(config.messages.busy, NamedTextColor.RED))
             })
             return
         }
@@ -79,20 +77,26 @@ class CaptchaManager(
                 handler = CaptchaSessionHandler(this, player.uniqueId, session.id)
             )
             logger.info(
-                "CAPTCHA {} for {} prepared as {} real Limbo blocks in chunks X {}..{}, Z {}..{}",
+                "CAPTCHA {} for {}: {} blocks, chunks X {}..{}, Z {}..{}, distance={}, yaw={}, pitch={}, roll={}, view={}, simulation={}",
                 session.id.toString().take(8),
                 player.username,
                 info.blockCount,
                 info.chunkBounds.minX,
                 info.chunkBounds.maxX,
                 info.chunkBounds.minZ,
-                info.chunkBounds.maxZ
+                info.chunkBounds.maxZ,
+                "%.2f".format(info.scene.distanceBlocks),
+                "%.2f".format(info.scene.rotationYawDegrees),
+                "%.2f".format(info.scene.rotationPitchDegrees),
+                "%.2f".format(info.scene.rotationRollDegrees),
+                info.viewDistance,
+                info.simulationDistance
             )
         } catch (throwable: Throwable) {
             sessions.remove(player.uniqueId, session.id)
             environment.dispose(session.id)
             logger.error("Failed to build/spawn CAPTCHA Limbo for {}", player.username, throwable)
-            player.disconnect(message("CAPTCHA service is temporarily unavailable.", NamedTextColor.RED))
+            player.disconnect(message(config.messages.unavailable, NamedTextColor.RED))
             return
         }
 
@@ -109,20 +113,16 @@ class CaptchaManager(
         limboPlayer.disableFalling()
         limboPlayer.setGameMode(environment.gameMode)
         limboPlayer.sendAbilities()
-        teleportToCamera(limboPlayer)
+        teleportToCamera(sessionId, limboPlayer)
 
         val becameWaiting = synchronized(session) {
             if (session.state == VerificationState.CAPTCHA_LOADING) {
                 session.state = VerificationState.CAPTCHA_WAITING
                 true
-            } else {
-                false
-            }
+            } else false
         }
 
-        if (becameWaiting) {
-            sendPrompt(session)
-        }
+        if (becameWaiting) sendPrompt(session)
     }
 
     fun submit(playerId: UUID, sessionId: UUID, input: String) {
@@ -134,9 +134,7 @@ class CaptchaManager(
         var exhausted = false
 
         synchronized(session) {
-            if (session.state != VerificationState.CAPTCHA_WAITING) {
-                return
-            }
+            if (session.state != VerificationState.CAPTCHA_WAITING) return
 
             if (session.matches(input)) {
                 session.state = VerificationState.VERIFIED
@@ -156,21 +154,15 @@ class CaptchaManager(
         }
 
         if (exhausted) {
-            proxyPlayer.disconnect(message("Too many wrong CAPTCHA attempts.", NamedTextColor.RED))
+            proxyPlayer.disconnect(message(config.messages.tooManyAttempts, NamedTextColor.RED))
             cleanup(session, delayedDispose = true)
             return
         }
 
-        // With real VirtualWorld blocks there is no packet overlay to redraw.
-        // Keep the same visible code for the remaining attempts; this avoids a
-        // world switch in the middle of a verification session and makes the
-        // rendering path deterministic.
-        proxyPlayer.sendMessage(
-            message(
-                "Wrong code. Try the same CAPTCHA again (${session.attempts}/${config.maxAttempts}).",
-                NamedTextColor.RED
-            )
-        )
+        val text = config.messages.wrong
+            .replace("{attempt}", session.attempts.toString())
+            .replace("{max}", config.maxAttempts.toString())
+        proxyPlayer.sendMessage(message(text, NamedTextColor.RED))
     }
 
     private fun complete(session: CaptchaSession, proxyPlayer: Player, limboPlayer: LimboPlayer) {
@@ -179,7 +171,7 @@ class CaptchaManager(
         val target = proxy.getServer(config.targetServer)
         if (target.isEmpty) {
             logger.error("Configured target server '{}' does not exist", config.targetServer)
-            proxyPlayer.disconnect(message("Target server is not configured correctly.", NamedTextColor.RED))
+            proxyPlayer.disconnect(message(config.messages.targetMissing, NamedTextColor.RED))
             cleanup(session, delayedDispose = true)
             return
         }
@@ -188,7 +180,7 @@ class CaptchaManager(
         timeoutTasks.remove(session.playerId)?.cancel()
         session.limboPlayer = null
 
-        proxyPlayer.sendMessage(message("Verification passed.", NamedTextColor.GREEN))
+        proxyPlayer.sendMessage(message(config.messages.passed, NamedTextColor.GREEN))
         limboPlayer.disconnect(target.get())
         scheduleDispose(session.id)
     }
@@ -197,12 +189,14 @@ class CaptchaManager(
         if (!config.lockPlayerPosition) return
 
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
-        val dx = x - environment.spawnX
-        val dy = y - environment.spawnY
-        val dz = z - environment.spawnZ
+        val camera = environment.camera(sessionId) ?: return
+        val dx = x - camera.x
+        val dy = y - camera.y
+        val dz = z - camera.z
+        val maxDistanceSquared = config.player.lockRadiusBlocks * config.player.lockRadiusBlocks
 
-        if (dx * dx + dy * dy + dz * dz > MAX_MOVE_DISTANCE_SQUARED) {
-            session.limboPlayer?.let(::teleportToCamera)
+        if (dx * dx + dy * dy + dz * dz > maxDistanceSquared) {
+            session.limboPlayer?.let { teleportToCamera(sessionId, it) }
         }
     }
 
@@ -223,9 +217,8 @@ class CaptchaManager(
     private fun timeout(playerId: UUID, sessionId: UUID) {
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
         val shouldKick = synchronized(session) {
-            if (session.state == VerificationState.VERIFIED || session.state == VerificationState.FAILED) {
-                false
-            } else {
+            if (session.state == VerificationState.VERIFIED || session.state == VerificationState.FAILED) false
+            else {
                 session.state = VerificationState.FAILED
                 true
             }
@@ -233,7 +226,7 @@ class CaptchaManager(
         if (!shouldKick) return
 
         val proxyPlayer = session.limboPlayer?.proxyPlayer
-        proxyPlayer?.disconnect(message("CAPTCHA timed out.", NamedTextColor.RED))
+        proxyPlayer?.disconnect(message(config.messages.timeout, NamedTextColor.RED))
         cleanup(session, delayedDispose = true)
     }
 
@@ -241,12 +234,7 @@ class CaptchaManager(
         sessions.remove(session.playerId, session.id)
         timeoutTasks.remove(session.playerId)?.cancel()
         session.limboPlayer = null
-
-        if (delayedDispose) {
-            scheduleDispose(session.id)
-        } else {
-            environment.dispose(session.id)
-        }
+        if (delayedDispose) scheduleDispose(session.id) else environment.dispose(session.id)
     }
 
     private fun scheduleDispose(sessionId: UUID) {
@@ -256,19 +244,14 @@ class CaptchaManager(
             .schedule()
     }
 
-    private fun teleportToCamera(limboPlayer: LimboPlayer) {
-        limboPlayer.teleport(
-            environment.spawnX,
-            environment.spawnY,
-            environment.spawnZ,
-            environment.spawnYaw,
-            environment.spawnPitch
-        )
+    private fun teleportToCamera(sessionId: UUID, limboPlayer: LimboPlayer) {
+        val camera = environment.camera(sessionId) ?: return
+        limboPlayer.teleport(camera.x, camera.y, camera.z, camera.yaw, camera.pitch)
     }
 
     private fun sendPrompt(session: CaptchaSession) {
         val player = session.limboPlayer?.proxyPlayer ?: return
-        player.sendMessage(message("Type the 3D block code you see in chat.", NamedTextColor.YELLOW))
+        player.sendMessage(message(config.messages.prompt, NamedTextColor.YELLOW))
     }
 
     fun shutdown() {
@@ -278,11 +261,10 @@ class CaptchaManager(
     }
 
     private fun message(text: String, color: NamedTextColor): Component =
-        Component.text("[pnCaptcha] ", NamedTextColor.GOLD)
+        Component.text(config.messages.prefix, NamedTextColor.GOLD)
             .append(Component.text(text, color))
 
     companion object {
-        private const val MAX_MOVE_DISTANCE_SQUARED = 2.25
         private val DISPOSE_DELAY: Duration = Duration.ofSeconds(2)
     }
 }
