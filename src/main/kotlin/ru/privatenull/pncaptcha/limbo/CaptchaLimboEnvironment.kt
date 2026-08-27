@@ -11,11 +11,8 @@ import ru.privatenull.pncaptcha.config.CaptchaConfig
 
 /**
  * One shared in-memory Limbo world for every CAPTCHA session.
- *
- * There is still exactly one physical pedestal block. The angled letters are
- * PacketEvents overlays. Spawn yaw/pitch are derived from the configured scene
- * so changing CAPTCHA distance or vertical placement keeps the camera aimed at
- * the centre automatically.
+ * The world contains exactly one physical pedestal block; CAPTCHA blocks are
+ * always per-client PacketEvents overlays.
  */
 class CaptchaLimboEnvironment(
     private val factory: LimboFactory,
@@ -28,6 +25,7 @@ class CaptchaLimboEnvironment(
     val spawnZ: Double = CaptchaScene.SPAWN_Z
     val spawnYaw: Float = CaptchaScene.spawnYaw(config)
     val spawnPitch: Float = CaptchaScene.spawnPitch(config)
+    val gameMode: GameMode = if (config.creativeMode) GameMode.CREATIVE else GameMode.ADVENTURE
 
     init {
         val world = factory.createVirtualWorld(
@@ -47,9 +45,6 @@ class CaptchaLimboEnvironment(
             pedestal
         )
 
-        // Pre-create every chunk the configured volume may touch. LimboAPI's
-        // own spawn-chunk radius still controls exactly when distant chunks are
-        // delivered, while the renderer re-applies its overlay after delivery.
         val bounds = CaptchaScene.chunkBounds(config)
         for (chunkX in bounds.minX..bounds.maxX) {
             for (chunkZ in bounds.minZ..bounds.maxZ) {
@@ -62,7 +57,7 @@ class CaptchaLimboEnvironment(
 
         limbo = factory.createLimbo(world)
             .setName("pnCaptcha")
-            .setGameMode(GameMode.CREATIVE)
+            .setGameMode(gameMode)
             .setReadTimeout(config.timeout.toMillis().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() + 5_000)
             .setViewDistance(CaptchaScene.recommendedViewDistance(config))
             .setSimulationDistance(2)
