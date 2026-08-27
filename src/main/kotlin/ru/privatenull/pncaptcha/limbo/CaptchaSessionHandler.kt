@@ -21,11 +21,11 @@ class CaptchaSessionHandler(
     }
 
     override fun onMove(posX: Double, posY: Double, posZ: Double) {
-        manager.enforcePosition(playerId, sessionId, posX, posY, posZ)
+        manager.onMove(playerId, sessionId, posX, posY, posZ)
     }
 
     override fun onMove(posX: Double, posY: Double, posZ: Double, yaw: Float, pitch: Float) {
-        manager.enforcePosition(playerId, sessionId, posX, posY, posZ)
+        manager.onMove(playerId, sessionId, posX, posY, posZ, yaw, pitch)
     }
 
     override fun onDisconnect() {
