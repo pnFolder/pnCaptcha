@@ -2,7 +2,7 @@
 
 `pnCaptcha` is a Velocity CAPTCHA gate that keeps unverified connections away from real backend servers.
 
-Current test release: **0.2.4**.
+Current test release: **0.2.5**.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ Current test release: **0.2.4**.
 - **PacketEvents** renders each CAPTCHA as client-only fake block updates.
 - Fake blocks are grouped by 16×16×16 chunk section and sent with `MULTI_BLOCK_CHANGE`.
 - The renderer re-applies the frame after spawn so late Limbo chunk packets cannot permanently overwrite the fake blocks with air.
-- The CAPTCHA is now a **real rotated 3D object**: the entire local text plane is rotated around world Y, rather than keeping every character on one straight world-Z line and only moving the camera.
+- The CAPTCHA is a **real rotated 3D object**: the entire local text plane is rotated around world Y, rather than keeping every character on one straight world-Z line and only moving the camera.
 - Each lit font pixel becomes a configurable voxel cell (`glyph-scale-x` × `glyph-scale-y`) and is extruded by `glyph-depth` blocks along the rotated depth axis.
 - Per-character Y/depth jitter can make the line less sterile while preserving readability.
 - Different players can see different codes at the same coordinates because CAPTCHA blocks are never written into the shared Limbo world.
@@ -94,7 +94,7 @@ The default `30 block / 28° / 2×2 / depth 3` setup is designed to look large a
 
 ### Upgrade from 0.2.3
 
-`0.2.4` adds `config-version=4` and automatically appends the new scene controls. If the file still contains the exact stock 0.2.3 values `glyph-scale-x=1` and `glyph-depth=6`, they are migrated to the new defaults `2` and `3`. Custom older values are preserved.
+`0.2.5` uses `config-version=4` and automatically appends the new scene controls. If the file still contains the exact stock 0.2.3 values `glyph-scale-x=1` and `glyph-depth=6`, they are migrated to the new defaults `2` and `3`. Custom older values are preserved.
 
 ## Build
 
@@ -102,4 +102,4 @@ The default `30 block / 28° / 2×2 / depth 3` setup is designed to look large a
 gradle clean build
 ```
 
-The shaded plugin is written to `build/libs/pnCaptcha-0.2.4.jar`.
+The shaded plugin is written to `build/libs/pnCaptcha-0.2.5.jar`.
