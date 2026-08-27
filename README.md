@@ -2,42 +2,56 @@
 
 `pnCaptcha` is a Velocity CAPTCHA gate that keeps unverified connections away from real backend servers.
 
-Current test release: **0.2.6**.
+Current test release: **0.3.0**.
 
 ## Architecture
 
-- **LimboAPI** provides one shared in-memory virtual server.
-- The Limbo world contains only **one physical pedestal block under the player**.
-- **PacketEvents** renders each CAPTCHA as client-only fake block updates.
-- Fake blocks are grouped by 16×16×16 chunk section and sent with `MULTI_BLOCK_CHANGE`.
-- The renderer re-applies the frame after spawn so late Limbo chunk packets cannot permanently overwrite the fake blocks with air.
-- The CAPTCHA is a **real rotated 3D object**: the entire text plane is rotated around world Y, so one side is physically farther from the player.
-- Each lit font pixel becomes a configurable voxel cell (`glyph-scale-x` × `glyph-scale-y`) and is extruded by `glyph-depth` blocks along the rotated depth axis.
-- Different players can see different codes at the same coordinates because CAPTCHA blocks are never written into the shared Limbo world.
+0.3.0 removes the fragile packet-only block overlay completely.
+
+- **LimboAPI** creates a tiny in-memory `VirtualWorld` for each active verification session.
+- The generated CAPTCHA blocks are written into that virtual world **before the player joins it**.
+- Minecraft therefore receives the CAPTCHA through normal Limbo chunk data. There is no `BLOCK_CHANGE` race with unloaded chunks and no late chunk packet can erase the challenge.
+- **PacketEvents is no longer required by pnCaptcha.**
+- The world is not a disk world/map. It exists only in RAM for one CAPTCHA session and is disposed when the player verifies, disconnects, times out, or fails.
+- The player still has one pedestal block at spawn, plus the 3D CAPTCHA construction itself.
+- The entire text plane is physically rotated in X/Z and every lit font pixel is extruded into real depth.
+- `max-active-captchas` caps concurrent per-session worlds so a connection flood cannot allocate them without limit.
+
+```text
+Velocity
+  |
+  +-- cache hit -------------------------------------> lobby
+  |
+  v
+create per-session Limbo VirtualWorld
+  |
+  +-- pedestal
+  +-- real 3D CAPTCHA blocks already stored in chunks
+  +-- creative/adventure inspection
+  +-- chat answer / timeout / attempts
+  |
+  +-- pass ------------------------------------------> lobby
+  `-- fail ------------------------------------------> disconnect
+```
 
 ## Runtime requirements
 
 - Java 21+
 - Velocity 3.5.x
 - LimboAPI 1.1.26+
-- PacketEvents 2.13.0+
 
-When PacketEvents is installed together with LimboAPI:
+PacketEvents can remain installed for your other plugins, but pnCaptcha 0.3.0 does not depend on it.
 
-```yaml
-main:
-  save-uncompressed-packets: true
-  compatibility-mode: true
-```
+## Why simulation/view distance did not fix 0.2.x
 
-LimboAPI defaults `chunk-radius-send-on-spawn` to `2`, which means the spawn chunk plus directly adjacent chunks. pnCaptcha 0.2.6 deliberately keeps its stock scene inside those immediately available chunks.
+A larger view or simulation distance tells the client/server how much world may be visible/simulated, but it does not make a fake `BLOCK_CHANGE` persistent. If a block-change packet is sent before the chunk is loaded, the client can discard it; if a real chunk packet arrives later, that chunk data replaces the fake state. 0.3.0 avoids the problem instead of trying to time around it: the block is part of the Limbo chunk itself.
 
 ## Configuration
 
 `plugins/pncaptcha/config.properties` is generated and older configs are migrated automatically.
 
 ```properties
-config-version=5
+config-version=6
 
 target-server=lobby
 captcha-length=5
@@ -47,19 +61,24 @@ verified-cache-minutes=720
 noise-blocks=8
 max-joins-per-window=6
 join-window-seconds=10
+max-active-captchas=128
 
-# Inspection/player behaviour
+# Player inspection
 creative-mode=true
 lock-player-position=false
 
+# Per-session Limbo chunk settings
+limbo-view-distance=8
+limbo-simulation-distance=6
+
 # Whole scene placement
-captcha-distance-blocks=20.0
-captcha-angle-degrees=24.0
+captcha-distance-blocks=30.0
+captcha-angle-degrees=28.0
 captcha-center-height-blocks=8.0
 camera-pitch-offset-degrees=0.0
 
 # Glyph mass / size / spacing
-glyph-scale-x=1
+glyph-scale-x=2
 glyph-scale-y=2
 glyph-depth=3
 glyph-gap-blocks=2
@@ -73,38 +92,23 @@ noise-material=minecraft:gray_stained_glass
 
 ### Important visual controls
 
-- `creative-mode=true` gives the player Creative mode inside CAPTCHA Limbo.
-- `lock-player-position=false` lets the player fly around and inspect the 3D construction. Set it to `true` later for a locked production view.
-- `captcha-distance-blocks` controls how many blocks away the CAPTCHA centre is. Default `20` is intentionally conservative for reliable visibility.
-- `captcha-angle-degrees` physically rotates the entire text line. Default `24` gives clear perspective without pushing the far edge too deep into unloaded chunks.
-- `captcha-center-height-blocks` changes vertical placement; the camera automatically aims at the configured centre.
-- `glyph-scale-x` and `glyph-scale-y` control front-face fatness/size.
-- `glyph-depth` is the **real 3D thickness in blocks**. Default `3`.
-- `glyph-gap-blocks` controls spacing between characters.
-- `glyph-jitter-y-blocks` and `glyph-jitter-depth-blocks` add small per-character offsets like the reference image.
+- `captcha-distance-blocks` — distance to the centre of the CAPTCHA. Default `30`.
+- `captcha-angle-degrees` — physical rotation of the whole CAPTCHA plane. Default `28`.
+- `captcha-center-height-blocks` — vertical centre; the camera automatically aims at it.
+- `glyph-scale-x` / `glyph-scale-y` — front-face fatness and size.
+- `glyph-depth` — **real 3D thickness in blocks**. Default `3`.
+- `glyph-gap-blocks` — spacing between characters.
+- `glyph-jitter-y-blocks` / `glyph-jitter-depth-blocks` — small random offsets per character.
+- `limbo-view-distance` — chunk view distance used by each CAPTCHA Limbo.
+- `limbo-simulation-distance` — simulation distance used by each CAPTCHA Limbo.
+- `creative-mode=true` — gives Creative mode inside the challenge for visual inspection.
+- `lock-player-position=false` — lets you fly around the construction while tuning it.
 
-### If you want about 30 blocks distance
+## Reliability and load
 
-You can use:
+Per-session Limbo worlds are more reliable than fake blocks, but they cost more RAM than one shared empty Limbo. pnCaptcha therefore keeps the existing per-IP rate limiter and also adds `max-active-captchas`. The world is tiny and in-memory, and it is disposed shortly after the player leaves the verification flow.
 
-```properties
-captcha-distance-blocks=30.0
-captcha-angle-degrees=28.0
-glyph-depth=3
-```
-
-With a large/angled CAPTCHA at that distance, also change LimboAPI to send a wider initial chunk area:
-
-```yaml
-main:
-  chunk-radius-send-on-spawn: 3
-```
-
-Otherwise the far side of the rotated CAPTCHA can land outside the chunks the client has received when fake block updates are sent.
-
-## Upgrade notes
-
-`0.2.6` uses `config-version=5`. Exact stock 0.2.5 visual values (`30.0` distance, `28.0` angle, `glyph-scale-x=2`) are migrated to the safer visible defaults (`20.0`, `24.0`, `1`). Custom values are preserved. New keys such as `creative-mode` and `lock-player-position` are appended automatically.
+Wrong answers currently keep the same visible CAPTCHA for the remaining attempts. This is intentional in 0.3.0: it avoids switching worlds mid-session while the rendering architecture is being validated.
 
 ## Build
 
@@ -112,4 +116,4 @@ Otherwise the far side of the rotated CAPTCHA can land outside the chunks the cl
 gradle clean build
 ```
 
-The shaded plugin is written to `build/libs/pnCaptcha-0.2.6.jar`.
+The shaded plugin is written to `build/libs/pnCaptcha-0.3.0.jar`.
