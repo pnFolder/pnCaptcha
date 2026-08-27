@@ -1,144 +1,165 @@
 package ru.privatenull.pncaptcha.captcha
 
 import ru.privatenull.pncaptcha.config.CaptchaConfig
-import java.security.SecureRandom
+import ru.privatenull.pncaptcha.config.WeightedMaterial
 import java.util.Random
 import kotlin.math.roundToInt
 
-/**
- * Builds one client-only CAPTCHA as a genuinely rotated 3D voxel sculpture.
- *
- * Local U is screen-left -> screen-right across the text. Local D is depth from
- * the bright face into the dark body. Both axes are rotated around world Y by
- * captcha-angle-degrees, so the front faces themselves are no longer arranged
- * on one straight world-Z line. One side of the text is physically farther from
- * the player, exactly like viewing a thick sign from an angle.
- */
-class CaptchaLayout(
-    private val random: Random = SecureRandom()
-) {
-    fun build(answer: String, config: CaptchaConfig): Map<BlockPos, String> {
+/** Builds the complete voxel sculpture from the resolved public configuration. */
+class CaptchaLayout {
+    fun build(
+        answer: String,
+        config: CaptchaConfig,
+        font: CaptchaFont.ResolvedFont,
+        scene: CaptchaScene.ResolvedScene,
+        random: Random
+    ): Map<BlockPos, String> {
         require(answer.isNotEmpty()) { "answer must not be empty" }
 
+        val bodyBlocks = LinkedHashMap<BlockPos, String>()
         val frontBlocks = LinkedHashMap<BlockPos, String>()
-        val sideBlocks = LinkedHashMap<BlockPos, String>()
 
-        val glyphWidth = CaptchaFont.WIDTH * config.glyphScaleX
+        val glyphWidth = font.width * config.geometry.pixelWidth
         val totalWidth = answer.length * glyphWidth +
-            (answer.length - 1) * config.glyphGapBlocks
-        val totalHeight = CaptchaFont.HEIGHT * config.glyphScaleY
-
-        // U increases toward screen-right. With angle=0, rightX=-1 preserves
-        // the non-mirrored orientation that was fixed in 0.2.2.
-        val firstU = -(totalWidth / 2)
-        val topY = (CaptchaScene.centerY(config) + (totalHeight - 1) / 2.0).roundToInt()
+            (answer.length - 1) * config.geometry.letterGapBlocks
+        val totalHeight = font.height * config.geometry.pixelHeight
+        val firstU = if (config.geometry.centerText) -(totalWidth - 1) / 2.0 else 0.0
+        val topV = (totalHeight - 1) / 2.0
 
         answer.forEachIndexed { charIndex, char ->
-            val pattern = CaptchaFont.pattern(char)
-            val charStartU = firstU + charIndex * (glyphWidth + config.glyphGapBlocks)
-            val charJitterY = signedJitter(config.glyphJitterYBlocks)
-            val charJitterDepth = signedJitter(config.glyphJitterDepthBlocks)
+            val pattern = font.pattern(char)
+            val baseCharU = firstU + charIndex * (glyphWidth + config.geometry.letterGapBlocks)
+
+            val charHorizontalJitter = signedJitter(config.randomness.character.horizontalJitterBlocks, config, random)
+            val charVerticalJitter = signedJitter(config.randomness.character.verticalJitterBlocks, config, random)
+            val charDepthJitter = signedJitter(config.randomness.character.depthJitterBlocks, config, random)
+
+            val perCharacterFront = pick(config.palette.front.materials, random)
+            val perCharacterSide = pick(config.palette.side.materials, random)
+            val perCharacterBack = pick(config.palette.back.materials, random)
 
             pattern.forEachIndexed { row, pixels ->
                 pixels.forEachIndexed pixelLoop@{ column, pixel ->
                     if (pixel != '1') return@pixelLoop
 
-                    val frontMaterial = config.glyphMaterials[random.nextInt(config.glyphMaterials.size)]
-                    val sideSeed = random.nextInt(config.glyphSideMaterials.size)
+                    for (pixelX in 0 until config.geometry.pixelWidth) {
+                        for (pixelY in 0 until config.geometry.pixelHeight) {
+                            val localU = baseCharU + column * config.geometry.pixelWidth + pixelX + charHorizontalJitter
+                            val localV = topV - row * config.geometry.pixelHeight - pixelY + charVerticalJitter
+                            val frontDepth = charDepthJitter.toDouble()
 
-                    for (pixelX in 0 until config.glyphScaleX) {
-                        for (pixelY in 0 until config.glyphScaleY) {
-                            val localU = charStartU + column * config.glyphScaleX + pixelX
-                            val y = topY - row * config.glyphScaleY - pixelY + charJitterY
+                            val frontMaterial = materialFor(
+                                config.palette.mode,
+                                config.palette.front.materials,
+                                perCharacterFront,
+                                random
+                            )
 
-                            // Write the dark body first. The face map is merged
-                            // afterwards so a bright front voxel always wins if
-                            // integer voxelisation causes two rotated cells to meet.
-                            for (layer in config.glyphDepth - 1 downTo 1) {
-                                val localDepth = charJitterDepth + layer
-                                val position = transform(localU, y, localDepth, config)
-                                val material = config.glyphSideMaterials[
-                                    (sideSeed + layer) % config.glyphSideMaterials.size
-                                ]
-                                sideBlocks[position] = material
+                            for (layer in config.geometry.depthBlocks - 1 downTo 1) {
+                                val isBack = layer == config.geometry.depthBlocks - 1
+                                val group = if (isBack) config.palette.back.materials else config.palette.side.materials
+                                val perCharacter = if (isBack) perCharacterBack else perCharacterSide
+                                val material = materialFor(config.palette.mode, group, perCharacter, random)
+                                val position = scene.transform(localU, localV, frontDepth + layer)
+                                bodyBlocks[toBlockPos(position)] = material
                             }
 
-                            val frontPosition = transform(localU, y, charJitterDepth, config)
-                            frontBlocks[frontPosition] = frontMaterial
+                            frontBlocks[toBlockPos(scene.transform(localU, localV, frontDepth))] = frontMaterial
                         }
                     }
                 }
             }
         }
 
-        val result = LinkedHashMap<BlockPos, String>(sideBlocks.size + frontBlocks.size + config.noiseBlocks)
-        result.putAll(sideBlocks)
+        val result = LinkedHashMap<BlockPos, String>(
+            bodyBlocks.size + frontBlocks.size + if (config.noise.enabled) config.noise.count else 0
+        )
+        result.putAll(bodyBlocks)
         result.putAll(frontBlocks)
 
-        if (config.noiseBlocks > 0) {
-            addBackgroundNoise(
+        if (config.noise.enabled && config.noise.count > 0) {
+            addNoise(
                 blocks = result,
                 firstU = firstU,
                 totalWidth = totalWidth,
-                topY = topY,
+                topV = topV,
                 totalHeight = totalHeight,
-                config = config
+                config = config,
+                scene = scene,
+                random = random
             )
         }
 
         return result
     }
 
-    private fun transform(
-        localU: Int,
-        y: Int,
-        localDepth: Int,
-        config: CaptchaConfig
-    ): BlockPos {
-        val worldX = CaptchaScene.centerX(config) +
-            localU * CaptchaScene.rightX(config) +
-            localDepth * CaptchaScene.depthX(config)
-        val worldZ = CaptchaScene.centerZ(config) +
-            localU * CaptchaScene.rightZ(config) +
-            localDepth * CaptchaScene.depthZ(config)
-
-        return BlockPos(
-            x = worldX.roundToInt(),
-            y = y,
-            z = worldZ.roundToInt()
-        )
-    }
-
-    private fun addBackgroundNoise(
+    private fun addNoise(
         blocks: MutableMap<BlockPos, String>,
-        firstU: Int,
+        firstU: Double,
         totalWidth: Int,
-        topY: Int,
+        topV: Double,
         totalHeight: Int,
-        config: CaptchaConfig
+        config: CaptchaConfig,
+        scene: CaptchaScene.ResolvedScene,
+        random: Random
     ) {
-        val minU = firstU - 3
-        val maxU = firstU + totalWidth + 2
-        val minY = topY - totalHeight - 2
-        val maxY = topY + 2
-        val baseDepth = config.glyphDepth + config.glyphJitterDepthBlocks + 2
+        val minU = firstU - config.noise.horizontalPaddingBlocks
+        val maxU = firstU + totalWidth - 1 + config.noise.horizontalPaddingBlocks
+        val minV = topV - totalHeight + 1 - config.noise.verticalPaddingBlocks
+        val maxV = topV + config.noise.verticalPaddingBlocks
+        val minDepth = config.geometry.depthBlocks + config.noise.depthMinBlocks
+        val maxDepth = config.geometry.depthBlocks + config.noise.depthMaxBlocks
 
         var placed = 0
         var tries = 0
-        val maxTries = config.noiseBlocks * 30 + 30
+        val maxTries = config.noise.count * 40 + 100
 
-        while (placed < config.noiseBlocks && tries++ < maxTries) {
-            val localU = random.nextInt(maxU - minU + 1) + minU
-            val y = random.nextInt(maxY - minY + 1) + minY
-            val localDepth = baseDepth + random.nextInt(3)
-            val position = transform(localU, y, localDepth, config)
+        while (placed < config.noise.count && tries++ < maxTries) {
+            val u = randomBetween(minU, maxU, random)
+            val v = randomBetween(minV, maxV, random)
+            val d = randomBetween(minDepth.toDouble(), maxDepth.toDouble(), random)
+            val position = toBlockPos(scene.transform(u, v, d))
 
-            if (blocks.putIfAbsent(position, config.noiseMaterial) == null) {
+            if (blocks.putIfAbsent(position, pick(config.noise.materials, random)) == null) {
                 placed++
             }
         }
     }
 
-    private fun signedJitter(amount: Int): Int =
-        if (amount == 0) 0 else random.nextInt(amount * 2 + 1) - amount
+    private fun materialFor(
+        mode: String,
+        materials: List<WeightedMaterial>,
+        perCharacter: String,
+        random: Random
+    ): String = when (mode.lowercase()) {
+        "solid" -> materials.first().block
+        "per-character" -> perCharacter
+        else -> pick(materials, random)
+    }
+
+    private fun pick(materials: List<WeightedMaterial>, random: Random): String {
+        val totalWeight = materials.sumOf { it.weight }
+        var cursor = random.nextInt(totalWeight)
+        for (entry in materials) {
+            cursor -= entry.weight
+            if (cursor < 0) return entry.block
+        }
+        return materials.last().block
+    }
+
+    private fun signedJitter(maximum: Int, config: CaptchaConfig, random: Random): Int {
+        if (!config.randomness.enabled || maximum <= 0) return 0
+        return random.nextInt(maximum * 2 + 1) - maximum
+    }
+
+    private fun randomBetween(min: Double, max: Double, random: Random): Double {
+        if (max <= min) return min
+        return min + random.nextDouble() * (max - min)
+    }
+
+    private fun toBlockPos(vector: CaptchaScene.Vec3): BlockPos = BlockPos(
+        vector.x.roundToInt(),
+        vector.y.roundToInt(),
+        vector.z.roundToInt()
+    )
 }
