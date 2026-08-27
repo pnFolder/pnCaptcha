@@ -2,33 +2,29 @@
 
 `pnCaptcha` is a Velocity CAPTCHA gate that keeps unverified connections away from real backend servers.
 
-Current test release: **0.2.3**.
+Current test release: **0.2.4**.
 
 ## Architecture
 
 - **LimboAPI** provides one shared in-memory virtual server.
 - The Limbo world contains only **one physical pedestal block under the player**.
 - **PacketEvents** renders each CAPTCHA as client-only fake block updates.
-- The default five-character frame is intentionally kept inside chunks that LimboAPI sends immediately on spawn. This prevents the Minecraft client from discarding fake block changes for unloaded chunks.
-- Fake blocks are grouped by 16×16×16 chunk section and sent with `MULTI_BLOCK_CHANGE`, so one frame needs far fewer packets than thousands of individual block changes.
-- The renderer re-applies the same frame shortly after spawn because a late Limbo chunk packet would otherwise overwrite client-only fake blocks with air.
-- Glyphs use corrected screen orientation, a narrow `1x` horizontal face, `2x` vertical scaling, and deep `6`-block Z extrusion. The player views the volume from an off-axis camera, so the side depth is real perspective rather than a fake 2D shadow.
-- Different players can see different codes at the same coordinates because no CAPTCHA blocks are written into the shared world.
+- Fake blocks are grouped by 16×16×16 chunk section and sent with `MULTI_BLOCK_CHANGE`.
+- The renderer re-applies the frame after spawn so late Limbo chunk packets cannot permanently overwrite the fake blocks with air.
+- The CAPTCHA is now a **real rotated 3D object**: the entire local text plane is rotated around world Y, rather than keeping every character on one straight world-Z line and only moving the camera.
+- Each lit font pixel becomes a configurable voxel cell (`glyph-scale-x` × `glyph-scale-y`) and is extruded by `glyph-depth` blocks along the rotated depth axis.
+- Per-character Y/depth jitter can make the line less sterile while preserving readability.
+- Different players can see different codes at the same coordinates because CAPTCHA blocks are never written into the shared Limbo world.
 
 ```text
-Velocity
-  |
-  +-- verified cache hit ----------------------------> lobby
-  |
-  v
-shared LimboAPI world
-  |
-  +-- one physical block under player
-  +-- PacketEvents 3D client-only CAPTCHA
-  +-- chat answer / timeout / attempts
-  |
-  +-- pass ------------------------------------------> lobby
-  `-- fail ------------------------------------------> disconnect
+                        farther side
+                           ████
+                       █████       rotated front plane
+                   █████
+               █████
+
+player ■ ------------------------------ ~30 blocks
+        camera automatically aims at CAPTCHA centre
 ```
 
 ## Runtime requirements
@@ -48,9 +44,11 @@ main:
 
 ## Configuration
 
-On first start, `plugins/pncaptcha/config.properties` is generated:
+`plugins/pncaptcha/config.properties` is generated and older configs are filled with newly introduced keys automatically.
 
 ```properties
+config-version=4
+
 target-server=lobby
 captcha-length=5
 max-attempts=3
@@ -59,17 +57,44 @@ verified-cache-minutes=720
 noise-blocks=8
 max-joins-per-window=6
 join-window-seconds=10
-glyph-scale-x=1
+
+# Whole scene placement
+captcha-distance-blocks=30.0
+captcha-angle-degrees=28.0
+captcha-center-height-blocks=8.0
+camera-pitch-offset-degrees=0.0
+
+# Glyph mass / size / spacing
+glyph-scale-x=2
 glyph-scale-y=2
-glyph-depth=6
+glyph-depth=3
+glyph-gap-blocks=2
+glyph-jitter-y-blocks=1
+glyph-jitter-depth-blocks=1
+
 glyph-materials=minecraft:polished_deepslate,minecraft:deepslate_bricks,minecraft:gray_concrete,minecraft:cyan_terracotta,minecraft:light_blue_terracotta
 glyph-side-materials=minecraft:deepslate_tiles,minecraft:deepslate_bricks,minecraft:blackstone,minecraft:polished_blackstone
 noise-material=minecraft:gray_stained_glass
 ```
 
-### Upgrading from 0.2.1/0.2.2
+### Visual controls
 
-Old `glyph-scale=2` is intentionally ignored by the 0.2.3 renderer. It made the five-character face too wide for the immediately available Limbo chunk set on some clients. Missing `glyph-scale-x` and `glyph-scale-y` values automatically use `1` and `2`, so deleting the old configuration is not required.
+- `captcha-distance-blocks` — distance from the player to the centre of the front face. Default: `30`.
+- `captcha-angle-degrees` — physical Y rotation of the whole CAPTCHA. `0` is straight-on; positive/negative values choose which side recedes. Default: `28`.
+- `captcha-center-height-blocks` — vertical centre of the CAPTCHA above the player's feet. The camera automatically aims at this height.
+- `camera-pitch-offset-degrees` — optional artistic correction after automatic aiming.
+- `glyph-scale-x` — horizontal fatness of every font pixel. Set `3` for very thick strokes.
+- `glyph-scale-y` — vertical size of every font pixel.
+- `glyph-depth` — actual 3D extrusion thickness in blocks. Default: `3`.
+- `glyph-gap-blocks` — clear space between characters.
+- `glyph-jitter-y-blocks` — random per-character vertical shift.
+- `glyph-jitter-depth-blocks` — random per-character forward/back shift.
+
+The default `30 block / 28° / 2×2 / depth 3` setup is designed to look large and massive while still remaining practical for Limbo's nearby chunk delivery. pnCaptcha logs the calculated chunk bounds on startup. If a heavily enlarged custom scene reaches beyond the usual LimboAPI spawn radius of two chunks and outer parts do not appear, increase LimboAPI's `main.chunk-radius-send-on-spawn`.
+
+### Upgrade from 0.2.3
+
+`0.2.4` adds `config-version=4` and automatically appends the new scene controls. If the file still contains the exact stock 0.2.3 values `glyph-scale-x=1` and `glyph-depth=6`, they are migrated to the new defaults `2` and `3`. Custom older values are preserved.
 
 ## Build
 
@@ -77,4 +102,4 @@ Old `glyph-scale=2` is intentionally ignored by the 0.2.3 renderer. It made the 
 gradle clean build
 ```
 
-The shaded plugin is written to `build/libs/pnCaptcha-0.2.3.jar`.
+The shaded plugin is written to `build/libs/pnCaptcha-0.2.4.jar`.
