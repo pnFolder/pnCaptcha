@@ -19,6 +19,14 @@ object CaptchaConfigLoader {
         val properties = Properties()
         Files.newInputStream(path).use(properties::load)
 
+        val legacySideMaterial = properties.string("glyph-side-material", "")
+        val sideMaterials = properties.string(
+            "glyph-side-materials",
+            if (legacySideMaterial.isNotEmpty()) legacySideMaterial else DEFAULT_SIDE_MATERIALS
+        ).split(',')
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+
         return CaptchaConfig(
             targetServer = properties.string("target-server", "lobby"),
             captchaLength = properties.int("captcha-length", 5),
@@ -29,12 +37,12 @@ object CaptchaConfigLoader {
             maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
             joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
             glyphScale = properties.int("glyph-scale", 2),
-            glyphDepth = properties.int("glyph-depth", 3),
+            glyphDepth = properties.int("glyph-depth", 5),
             glyphMaterials = properties.string("glyph-materials", DEFAULT_GLYPH_MATERIALS)
                 .split(',')
                 .map(String::trim)
                 .filter(String::isNotEmpty),
-            glyphSideMaterial = properties.string("glyph-side-material", "minecraft:deepslate_tiles"),
+            glyphSideMaterials = sideMaterials.ifEmpty { DEFAULT_SIDE_MATERIALS.split(',') },
             noiseMaterial = properties.string("noise-material", "minecraft:gray_stained_glass")
         )
     }
@@ -50,9 +58,9 @@ object CaptchaConfigLoader {
             setProperty("max-joins-per-window", "6")
             setProperty("join-window-seconds", "10")
             setProperty("glyph-scale", "2")
-            setProperty("glyph-depth", "3")
+            setProperty("glyph-depth", "5")
             setProperty("glyph-materials", DEFAULT_GLYPH_MATERIALS)
-            setProperty("glyph-side-material", "minecraft:deepslate_tiles")
+            setProperty("glyph-side-materials", DEFAULT_SIDE_MATERIALS)
             setProperty("noise-material", "minecraft:gray_stained_glass")
         }
 
@@ -71,5 +79,8 @@ object CaptchaConfigLoader {
         getProperty(key)?.trim()?.toLongOrNull() ?: default
 
     private const val DEFAULT_GLYPH_MATERIALS =
-        "minecraft:white_concrete,minecraft:light_gray_concrete,minecraft:cyan_concrete,minecraft:blue_concrete,minecraft:purple_concrete"
+        "minecraft:polished_deepslate,minecraft:deepslate_bricks,minecraft:gray_concrete,minecraft:cyan_terracotta,minecraft:light_blue_terracotta"
+
+    private const val DEFAULT_SIDE_MATERIALS =
+        "minecraft:deepslate_tiles,minecraft:deepslate_bricks,minecraft:blackstone,minecraft:polished_blackstone"
 }
