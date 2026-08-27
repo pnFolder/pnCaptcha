@@ -37,13 +37,17 @@ object CaptchaConfigLoader {
             maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
             joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
 
-            // 0.2.2 used glyph-scale=2. Do not inherit that value here: a 2x
-            // horizontal face can span chunks LimboAPI has not sent yet and the
-            // client simply discards those fake block changes. The new default
-            // keeps the face narrow but tall, while Z depth provides the mass.
-            glyphScaleX = properties.int("glyph-scale-x", 1),
+            captchaDistanceBlocks = properties.double("captcha-distance-blocks", 30.0),
+            captchaAngleDegrees = properties.double("captcha-angle-degrees", 28.0),
+            captchaCenterHeightBlocks = properties.double("captcha-center-height-blocks", 8.0),
+            cameraPitchOffsetDegrees = properties.double("camera-pitch-offset-degrees", 0.0),
+
+            glyphScaleX = properties.int("glyph-scale-x", 2),
             glyphScaleY = properties.int("glyph-scale-y", 2),
-            glyphDepth = properties.int("glyph-depth", 6),
+            glyphDepth = properties.int("glyph-depth", 3),
+            glyphGapBlocks = properties.int("glyph-gap-blocks", 2),
+            glyphJitterYBlocks = properties.int("glyph-jitter-y-blocks", 1),
+            glyphJitterDepthBlocks = properties.int("glyph-jitter-depth-blocks", 1),
             glyphMaterials = properties.string("glyph-materials", DEFAULT_GLYPH_MATERIALS)
                 .split(',')
                 .map(String::trim)
@@ -63,9 +67,20 @@ object CaptchaConfigLoader {
             setProperty("noise-blocks", "8")
             setProperty("max-joins-per-window", "6")
             setProperty("join-window-seconds", "10")
-            setProperty("glyph-scale-x", "1")
+
+            // Placement/perspective.
+            setProperty("captcha-distance-blocks", "30.0")
+            setProperty("captcha-angle-degrees", "28.0")
+            setProperty("captcha-center-height-blocks", "8.0")
+            setProperty("camera-pitch-offset-degrees", "0.0")
+
+            // Mass and spacing.
+            setProperty("glyph-scale-x", "2")
             setProperty("glyph-scale-y", "2")
-            setProperty("glyph-depth", "6")
+            setProperty("glyph-depth", "3")
+            setProperty("glyph-gap-blocks", "2")
+            setProperty("glyph-jitter-y-blocks", "1")
+            setProperty("glyph-jitter-depth-blocks", "1")
             setProperty("glyph-materials", DEFAULT_GLYPH_MATERIALS)
             setProperty("glyph-side-materials", DEFAULT_SIDE_MATERIALS)
             setProperty("noise-material", "minecraft:gray_stained_glass")
@@ -84,6 +99,9 @@ object CaptchaConfigLoader {
 
     private fun Properties.long(key: String, default: Long): Long =
         getProperty(key)?.trim()?.toLongOrNull() ?: default
+
+    private fun Properties.double(key: String, default: Double): Double =
+        getProperty(key)?.trim()?.toDoubleOrNull() ?: default
 
     private const val DEFAULT_GLYPH_MATERIALS =
         "minecraft:polished_deepslate,minecraft:deepslate_bricks,minecraft:gray_concrete,minecraft:cyan_terracotta,minecraft:light_blue_terracotta"
