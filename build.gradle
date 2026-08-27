@@ -5,21 +5,20 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '0.2.6'
+version = '0.3.0'
 
 repositories {
     mavenCentral()
     maven { name = 'papermc'; url = uri('https://repo.papermc.io/repository/maven-public/') }
     maven { name = 'elytrium'; url = uri('https://maven.elytrium.net/repo/') }
-    maven { name = 'codemc-releases'; url = uri('https://repo.codemc.io/repository/maven-releases/') }
 }
 
 dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     kapt 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     compileOnly 'net.elytrium.limboapi:api:1.1.26'
-    compileOnly 'com.github.retrooper:packetevents-velocity:2.13.0'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
+
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testImplementation 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     testImplementation 'net.elytrium.limboapi:api:1.1.26'
