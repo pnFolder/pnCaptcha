@@ -5,37 +5,21 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '0.2.4'
+version = '0.2.5'
 
 repositories {
     mavenCentral()
-    maven {
-        name = 'papermc'
-        url = uri('https://repo.papermc.io/repository/maven-public/')
-    }
-    maven {
-        name = 'elytrium'
-        url = uri('https://maven.elytrium.net/repo/')
-    }
-    maven {
-        name = 'codemc-releases'
-        url = uri('https://repo.codemc.io/repository/maven-releases/')
-    }
+    maven { name = 'papermc'; url = uri('https://repo.papermc.io/repository/maven-public/') }
+    maven { name = 'elytrium'; url = uri('https://maven.elytrium.net/repo/') }
+    maven { name = 'codemc-releases'; url = uri('https://repo.codemc.io/repository/maven-releases/') }
 }
 
 dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     kapt 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
-
-    // LimboAPI keeps unverified players off the real Paper servers.
     compileOnly 'net.elytrium.limboapi:api:1.1.26'
-
-    // PacketEvents is used only for per-player fake block overlays.
-    // The CAPTCHA glyphs never become real blocks in the Limbo world.
     compileOnly 'com.github.retrooper:packetevents-velocity:2.13.0'
-
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
-
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testImplementation 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     testImplementation 'net.elytrium.limboapi:api:1.1.26'
@@ -43,14 +27,10 @@ dependencies {
 }
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
 }
 
-kotlin {
-    jvmToolchain(21)
-}
+kotlin { jvmToolchain(21) }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -64,13 +44,9 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
     }
 }
 
-tasks.withType(Test).configureEach {
-    useJUnitPlatform()
-}
+tasks.withType(Test).configureEach { useJUnitPlatform() }
 
-tasks.named('jar') {
-    archiveClassifier = 'plain'
-}
+tasks.named('jar') { archiveClassifier = 'plain' }
 
 tasks.named('shadowJar') {
     archiveFileName = "pnCaptcha-${project.version}.jar"
@@ -78,6 +54,4 @@ tasks.named('shadowJar') {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-tasks.named('build') {
-    dependsOn tasks.named('shadowJar')
-}
+tasks.named('build') { dependsOn tasks.named('shadowJar') }
