@@ -12,15 +12,21 @@ data class CaptchaConfig(
     val maxJoinsPerWindow: Int = 6,
     val joinWindow: Duration = Duration.ofSeconds(10),
 
-    // Scene placement. The whole front plane is physically rotated in X/Z.
-    val captchaDistanceBlocks: Double = 30.0,
-    val captchaAngleDegrees: Double = 28.0,
+    // Player inspection controls. Creative is useful while tuning the scene;
+    // fake CAPTCHA blocks still cannot modify the shared Limbo world.
+    val creativeMode: Boolean = true,
+    val lockPlayerPosition: Boolean = false,
+
+    // Scene placement. Defaults stay completely inside LimboAPI's normal
+    // spawn+adjacent chunk set while still looking large from the player.
+    val captchaDistanceBlocks: Double = 20.0,
+    val captchaAngleDegrees: Double = 24.0,
     val captchaCenterHeightBlocks: Double = 8.0,
     val cameraPitchOffsetDegrees: Double = 0.0,
 
-    // Glyph mass/spacing. scaleX/scaleY are the visual "fatness" of one
-    // logical font pixel, while glyphDepth is the real 3D extrusion depth.
-    val glyphScaleX: Int = 2,
+    // Glyph mass/spacing. Depth is the actual 3D thickness; scale X/Y controls
+    // how fat one logical font pixel becomes on the front face.
+    val glyphScaleX: Int = 1,
     val glyphScaleY: Int = 2,
     val glyphDepth: Int = 3,
     val glyphGapBlocks: Int = 2,
