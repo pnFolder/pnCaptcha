@@ -22,15 +22,11 @@ object CaptchaScene {
             return (random.nextDouble() * 2.0 - 1.0) * maximum
         }
 
-        val spawn = Vec3(
-            config.player.spawn.x,
-            config.player.spawn.y,
-            config.player.spawn.z
-        )
-
+        val spawn = Vec3(config.player.spawn.x, config.player.spawn.y, config.player.spawn.z)
         val distance = (config.scene.distanceBlocks + jitter(sceneRandom.distanceJitterBlocks)).coerceAtLeast(1.0)
         val forwardYaw = config.scene.forwardYawDegrees + jitter(sceneRandom.forwardYawJitterDegrees)
         val height = config.scene.centerHeightBlocks + jitter(sceneRandom.heightJitterBlocks)
+        val lateralOffset = config.scene.lateralOffsetBlocks + jitter(sceneRandom.lateralJitterBlocks)
         val objectYaw = forwardYaw + config.scene.rotationYawDegrees + jitter(sceneRandom.rotationYawJitterDegrees)
         val objectPitch = config.scene.rotationPitchDegrees + jitter(sceneRandom.rotationPitchJitterDegrees)
         val objectRoll = config.scene.rotationRollDegrees + jitter(sceneRandom.rotationRollJitterDegrees)
@@ -38,14 +34,13 @@ object CaptchaScene {
         val forwardRad = Math.toRadians(forwardYaw)
         val forward = Vec3(-sin(forwardRad), 0.0, cos(forwardRad))
         val lateral = Vec3(-cos(forwardRad), 0.0, sin(forwardRad))
-        val center = spawn + forward * distance + lateral * config.scene.lateralOffsetBlocks + Vec3(0.0, height, 0.0)
+        val center = spawn + forward * distance + lateral * lateralOffset + Vec3(0.0, height, 0.0)
 
         val yawRad = Math.toRadians(objectYaw)
         var right = Vec3(-cos(yawRad), 0.0, sin(yawRad))
         var up = Vec3(0.0, 1.0, 0.0)
         var depth = Vec3(sin(yawRad), 0.0, cos(yawRad))
 
-        // Pitch around local right axis.
         val pitchRad = Math.toRadians(objectPitch)
         if (pitchRad != 0.0) {
             val c = cos(pitchRad)
@@ -56,7 +51,6 @@ object CaptchaScene {
             depth = pitchedDepth
         }
 
-        // Roll around the already pitched local depth axis.
         val rollRad = Math.toRadians(objectRoll)
         if (rollRad != 0.0) {
             val c = cos(rollRad)
@@ -95,6 +89,7 @@ object CaptchaScene {
             depth = depth,
             camera = camera,
             distanceBlocks = distance,
+            lateralOffsetBlocks = lateralOffset,
             forwardYawDegrees = forwardYaw,
             rotationYawDegrees = objectYaw,
             rotationPitchDegrees = objectPitch,
@@ -102,26 +97,25 @@ object CaptchaScene {
         )
     }
 
-    fun chunkBounds(
-        config: CaptchaConfig,
-        scene: ResolvedScene,
-        font: CaptchaFont.ResolvedFont
-    ): ChunkBounds {
+    fun chunkBounds(config: CaptchaConfig, scene: ResolvedScene, font: CaptchaFont.ResolvedFont): ChunkBounds {
         val width = config.captchaLength * font.width * config.geometry.pixelWidth +
             (config.captchaLength - 1) * config.geometry.letterGapBlocks
         val height = font.height * config.geometry.pixelHeight
+        val stepU = kotlin.math.abs(config.geometry.letterRiseBlocks) * (config.captchaLength - 1)
+        val stepD = kotlin.math.abs(config.geometry.letterDepthStepBlocks) * (config.captchaLength - 1)
 
         val uRadius = width / 2.0 + config.randomness.character.horizontalJitterBlocks +
             if (config.noise.enabled) config.noise.horizontalPaddingBlocks else 0
-        val vRadius = height / 2.0 + config.randomness.character.verticalJitterBlocks +
+        val vRadius = height / 2.0 + stepU + config.randomness.character.verticalJitterBlocks +
             if (config.noise.enabled) config.noise.verticalPaddingBlocks else 0
         val maxDepth = config.geometry.depthBlocks + config.randomness.character.depthJitterBlocks +
+            config.randomness.character.depthVariationBlocks + stepD +
             if (config.noise.enabled) config.noise.depthMaxBlocks else 0
 
         val points = mutableListOf<Vec3>()
         for (u in listOf(-uRadius, uRadius)) {
             for (v in listOf(-vRadius, vRadius)) {
-                for (d in listOf(-config.randomness.character.depthJitterBlocks.toDouble(), maxDepth.toDouble())) {
+                for (d in listOf(-maxDepth, maxDepth)) {
                     points += scene.transform(u, v, d)
                 }
             }
@@ -134,12 +128,7 @@ object CaptchaScene {
         val minBlockZ = minOf(points.minOf { floor(it.z).toInt() }, pedestalZ)
         val maxBlockZ = maxOf(points.maxOf { ceil(it.z).toInt() }, pedestalZ)
 
-        return ChunkBounds(
-            minX = minBlockX shr 4,
-            maxX = maxBlockX shr 4,
-            minZ = minBlockZ shr 4,
-            maxZ = maxBlockZ shr 4
-        )
+        return ChunkBounds(minBlockX shr 4, maxBlockX shr 4, minBlockZ shr 4, maxBlockZ shr 4)
     }
 
     fun recommendedViewDistance(config: CaptchaConfig, bounds: ChunkBounds): Int {
@@ -149,7 +138,7 @@ object CaptchaScene {
             max(kotlin.math.abs(bounds.minX - spawnChunkX), kotlin.math.abs(bounds.maxX - spawnChunkX)),
             max(kotlin.math.abs(bounds.minZ - spawnChunkZ), kotlin.math.abs(bounds.maxZ - spawnChunkZ))
         ) + 1
-        return max(config.limbo.viewDistance, radius).coerceAtMost(32)
+        return max(config.limbo.viewDistance, radius).coerceAtMost(config.limbo.maxAutoViewDistance)
     }
 
     data class ResolvedScene(
@@ -159,6 +148,7 @@ object CaptchaScene {
         val depth: Vec3,
         val camera: CameraPose,
         val distanceBlocks: Double,
+        val lateralOffsetBlocks: Double,
         val forwardYawDegrees: Double,
         val rotationYawDegrees: Double,
         val rotationPitchDegrees: Double,
@@ -168,20 +158,8 @@ object CaptchaScene {
             center + right * localU + up * localV + depth * localDepth
     }
 
-    data class CameraPose(
-        val x: Double,
-        val y: Double,
-        val z: Double,
-        val yaw: Float,
-        val pitch: Float
-    )
-
-    data class ChunkBounds(
-        val minX: Int,
-        val maxX: Int,
-        val minZ: Int,
-        val maxZ: Int
-    )
+    data class CameraPose(val x: Double, val y: Double, val z: Double, val yaw: Float, val pitch: Float)
+    data class ChunkBounds(val minX: Int, val maxX: Int, val minZ: Int, val maxZ: Int)
 
     data class Vec3(val x: Double, val y: Double, val z: Double) {
         operator fun plus(other: Vec3): Vec3 = Vec3(x + other.x, y + other.y, z + other.z)
