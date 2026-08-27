@@ -32,7 +32,7 @@ class PacketCaptchaRenderer(
         val next = layout.build(
             answer = answer,
             glyphMaterials = config.glyphMaterials,
-            sideMaterial = config.glyphSideMaterial,
+            sideMaterials = config.glyphSideMaterials,
             noiseMaterial = config.noiseMaterial,
             noiseCount = config.noiseBlocks,
             scale = config.glyphScale,
