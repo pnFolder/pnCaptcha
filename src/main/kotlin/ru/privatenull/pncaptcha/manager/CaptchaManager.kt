@@ -45,15 +45,13 @@ class CaptchaManager(
         }
 
         if (!rateLimiter.allow(player.remoteAddress.address)) {
-            event.addOnJoinCallback {
+            event.addOnJoinCallback(Runnable {
                 player.disconnect(message("Too many connection attempts. Try again in a few seconds.", NamedTextColor.RED))
-            }
+            })
             return
         }
 
-        event.addOnJoinCallback {
-            begin(player)
-        }
+        event.addOnJoinCallback(Runnable { begin(player) })
     }
 
     private fun begin(player: Player) {
@@ -69,10 +67,11 @@ class CaptchaManager(
             )
         )
 
-        val handler = CaptchaSessionHandler(this, player.uniqueId, session.id)
-
         try {
-            environment.spawn(player, handler)
+            environment.spawn(
+                player,
+                CaptchaSessionHandler(this, player.uniqueId, session.id)
+            )
         } catch (throwable: Throwable) {
             sessions.remove(player.uniqueId, session.id)
             logger.error("Failed to move {} into CAPTCHA Limbo", player.username, throwable)
@@ -81,7 +80,7 @@ class CaptchaManager(
         }
 
         timeoutTasks[player.uniqueId] = proxy.scheduler
-            .buildTask(plugin) { timeout(player.uniqueId, session.id) }
+            .buildTask(plugin, Runnable { timeout(player.uniqueId, session.id) })
             .delay(config.timeout)
             .schedule()
     }
@@ -92,8 +91,14 @@ class CaptchaManager(
         limboPlayer.disableFalling()
         limboPlayer.setGameMode(GameMode.ADVENTURE)
         limboPlayer.sendAbilities()
-
-        scheduleRender(playerId, sessionId, retriesLeft = 6, delayMillis = 120)
+        limboPlayer.teleport(
+            CaptchaLimboEnvironment.SPAWN_X,
+            CaptchaLimboEnvironment.SPAWN_Y,
+            CaptchaLimboEnvironment.SPAWN_Z,
+            CaptchaLimboEnvironment.SPAWN_YAW,
+            CaptchaLimboEnvironment.SPAWN_PITCH
+        )
+        scheduleRender(playerId, sessionId, retriesLeft = 8, delayMillis = 150)
     }
 
     private fun scheduleRender(
@@ -123,7 +128,7 @@ class CaptchaManager(
                         sendPrompt(current)
                     }
                 } else if (retriesLeft > 1) {
-                    scheduleRender(playerId, sessionId, retriesLeft - 1, 120)
+                    scheduleRender(playerId, sessionId, retriesLeft - 1, 150)
                 } else {
                     failInternal(current, "PacketEvents user was not ready after render retries")
                 }
@@ -139,6 +144,9 @@ class CaptchaManager(
         val limboPlayer = session.limboPlayer ?: return
         val proxyPlayer = limboPlayer.proxyPlayer
 
+        var passed = false
+        var exhausted = false
+
         synchronized(session) {
             if (session.state != VerificationState.CAPTCHA_WAITING) {
                 return
@@ -146,20 +154,28 @@ class CaptchaManager(
 
             if (session.matches(input)) {
                 session.state = VerificationState.VERIFIED
-                complete(session, proxyPlayer, limboPlayer)
-                return
+                passed = true
+            } else {
+                session.attempts++
+                if (session.attempts >= config.maxAttempts) {
+                    session.state = VerificationState.FAILED
+                    exhausted = true
+                } else {
+                    session.answer = generator.generate(config.captchaLength)
+                    session.state = VerificationState.CAPTCHA_LOADING
+                }
             }
+        }
 
-            session.attempts++
-            if (session.attempts >= config.maxAttempts) {
-                session.state = VerificationState.FAILED
-                cleanup(session)
-                proxyPlayer.disconnect(message("Too many wrong CAPTCHA attempts.", NamedTextColor.RED))
-                return
-            }
+        if (passed) {
+            complete(session, proxyPlayer, limboPlayer)
+            return
+        }
 
-            session.answer = generator.generate(config.captchaLength)
-            session.state = VerificationState.CAPTCHA_LOADING
+        if (exhausted) {
+            cleanup(session)
+            proxyPlayer.disconnect(message("Too many wrong CAPTCHA attempts.", NamedTextColor.RED))
+            return
         }
 
         proxyPlayer.sendMessage(
@@ -168,19 +184,24 @@ class CaptchaManager(
                 NamedTextColor.RED
             )
         )
-        scheduleRender(playerId, sessionId, retriesLeft = 3, delayMillis = 0)
+        scheduleRender(playerId, sessionId, retriesLeft = 4, delayMillis = 0)
     }
 
     private fun complete(session: CaptchaSession, proxyPlayer: Player, limboPlayer: LimboPlayer) {
         cache.markVerified(proxyPlayer)
-        cleanup(session)
 
         val target = proxy.getServer(config.targetServer)
         if (target.isEmpty) {
+            cleanup(session)
             logger.error("Configured target server '{}' does not exist", config.targetServer)
             proxyPlayer.disconnect(message("Target server is not configured correctly.", NamedTextColor.RED))
             return
         }
+
+        renderer.clear(proxyPlayer)
+        sessions.remove(session.playerId, session.id)
+        timeoutTasks.remove(session.playerId)?.cancel()
+        session.limboPlayer = null
 
         proxyPlayer.sendMessage(message("Verification passed.", NamedTextColor.GREEN))
         limboPlayer.disconnect(target.get())
@@ -219,12 +240,15 @@ class CaptchaManager(
 
     private fun timeout(playerId: UUID, sessionId: UUID) {
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
-        synchronized(session) {
+        val shouldKick = synchronized(session) {
             if (session.state == VerificationState.VERIFIED || session.state == VerificationState.FAILED) {
-                return
+                false
+            } else {
+                session.state = VerificationState.FAILED
+                true
             }
-            session.state = VerificationState.FAILED
         }
+        if (!shouldKick) return
 
         val proxyPlayer = session.limboPlayer?.proxyPlayer
         cleanup(session)
