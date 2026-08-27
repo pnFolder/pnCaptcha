@@ -1,10 +1,12 @@
 package ru.privatenull.pncaptcha.captcha
 
-object CaptchaFont {
-    const val WIDTH: Int = 5
-    const val HEIGHT: Int = 7
+import ru.privatenull.pncaptcha.config.FontConfig
 
-    private val glyphs: Map<Char, List<String>> = mapOf(
+object CaptchaFont {
+    const val CLASSIC_WIDTH: Int = 5
+    const val CLASSIC_HEIGHT: Int = 7
+
+    private val classicGlyphs: Map<Char, List<String>> = mapOf(
         'A' to glyph("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
         'B' to glyph("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
         'C' to glyph("01111", "10000", "10000", "10000", "10000", "10000", "01111"),
@@ -38,16 +40,60 @@ object CaptchaFont {
         '9' to glyph("01110", "10001", "10001", "01111", "00001", "00001", "01110")
     )
 
-    fun pattern(char: Char): List<String> = glyphs[char]
+    fun resolve(config: FontConfig): ResolvedFont {
+        val glyphs = when (config.preset.lowercase()) {
+            "custom" -> validateCustom(config.customGlyphs)
+            else -> classicGlyphs
+        }
+
+        val alphabet = config.alphabet.uppercase()
+        require(alphabet.all(glyphs::containsKey)) {
+            val missing = alphabet.filterNot(glyphs::containsKey).toSet().joinToString("")
+            "Font does not contain every character from alphabet. Missing: $missing"
+        }
+
+        val first = glyphs.values.first()
+        return ResolvedFont(
+            glyphs = glyphs,
+            width = first.first().length,
+            height = first.size,
+            alphabet = alphabet
+        )
+    }
+
+    fun pattern(char: Char): List<String> = classicGlyphs[char]
         ?: error("Unsupported captcha character: $char")
 
-    fun supports(char: Char): Boolean = glyphs.containsKey(char)
+    fun supports(char: Char): Boolean = classicGlyphs.containsKey(char)
+
+    private fun validateCustom(source: Map<Char, List<String>>): Map<Char, List<String>> {
+        require(source.isNotEmpty()) { "font.custom-glyphs must not be empty when preset=custom" }
+        val normalized = source.mapKeys { it.key.uppercaseChar() }
+        val height = normalized.values.first().size
+        val width = normalized.values.first().firstOrNull()?.length ?: 0
+        require(height > 0 && width > 0) { "Custom font glyphs must not be empty" }
+        normalized.forEach { (char, rows) ->
+            require(rows.size == height) { "Custom glyph '$char' must have $height rows" }
+            require(rows.all { row -> row.length == width && row.all { it == '0' || it == '1' } }) {
+                "Custom glyph '$char' must be a ${width}x$height matrix of 0/1"
+            }
+        }
+        return normalized
+    }
 
     private fun glyph(vararg rows: String): List<String> {
-        require(rows.size == HEIGHT) { "Glyph must have exactly $HEIGHT rows" }
-        require(rows.all { it.length == WIDTH && it.all { pixel -> pixel == '0' || pixel == '1' } }) {
-            "Glyph rows must be $WIDTH binary pixels wide"
-        }
+        require(rows.size == CLASSIC_HEIGHT)
+        require(rows.all { it.length == CLASSIC_WIDTH && it.all { pixel -> pixel == '0' || pixel == '1' } })
         return rows.toList()
+    }
+
+    data class ResolvedFont(
+        val glyphs: Map<Char, List<String>>,
+        val width: Int,
+        val height: Int,
+        val alphabet: String
+    ) {
+        fun pattern(char: Char): List<String> = glyphs[char.uppercaseChar()]
+            ?: error("Unsupported captcha character: $char")
     }
 }
