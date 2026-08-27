@@ -1,151 +1,124 @@
 # pnCaptcha
 
-`pnCaptcha` is a Velocity CAPTCHA gate that keeps unverified connections away from real backend servers while rendering the challenge as a real 3D voxel sculpture inside a tiny per-session LimboAPI `VirtualWorld`.
+`pnCaptcha` — CAPTCHA-шлюз для Velocity 3.5.x. Проверка проходит в отдельном лёгком LimboAPI `VirtualWorld`, поэтому Paper/backend не принимает непроверенные подключения. CAPTCHA строится реальными виртуальными блоками внутри Limbo до входа игрока; PacketEvents не нужен.
 
-Current development release: **0.4.0**.
+Текущая версия: **0.5.0**.
 
-## Architecture
-
-- Velocity receives the connection.
-- Verified UUID/IP pairs skip the challenge and continue to the configured backend.
-- Unverified players receive their own tiny in-memory Limbo world.
-- The entire CAPTCHA is written into that `VirtualWorld` before spawn, so normal chunk packets contain the blocks.
-- No Paper backend is used for verification and pnCaptcha does not depend on PacketEvents.
-- The session world is disposed after pass, fail, timeout, or disconnect.
-- `security.max-active-captchas` and the IP join limiter cap resource usage under connection floods.
-
-## Requirements
+## Требования
 
 - Java 21+
 - Velocity 3.5.x
 - LimboAPI 1.1.26+
 
-## One configuration file
+## Архитектура
 
-pnCaptcha 0.4.0 uses only:
+```text
+Internet -> Velocity -> проверка cache/rate-limit -> LimboAPI 3D CAPTCHA -> lobby
+```
+
+Для каждой активной проверки создаётся маленький in-memory мир. После успешной проверки, disconnect, timeout или исчерпания попыток мир освобождается. Количество одновременно активных CAPTCHA ограничивается через `security.max-active-captchas`.
+
+## Один конфиг
+
+Весь плагин настраивается через:
 
 ```text
 plugins/pncaptcha/config.yml
 ```
 
-The old `config.properties` format is no longer used and is removed on startup. The default `config.yml` is copied from the jar with comments so every visual control is visible in one place.
+`0.5.0` использует `config-version: 1`. Если найден старый конфиг без этой версии, pnCaptcha сохраняет его как `config.pre-0.5.0.yml.bak` и создаёт новый полный файл. Старый `config.properties` больше не используется.
 
-## What can be configured
+## Что настраивается
 
-### Verification and protection
+- `general` — lobby, длина кода, попытки, timeout, cache.
+- `security` — IP rate-limit и лимит одновременно активных Limbo-миров.
+- `updates` — проверка нового GitHub Release при запуске, timeout запроса, уведомления консоли и игроков с permission.
+- `limbo` — view/simulation distance, авторасширение view-distance, padding чанков, свет и платформа под игроком вплоть до её размера и материала.
+- `player` — gamemode, spawn, камера, lock-position и recovery. Recovery возвращает игрока назад, если он упал ниже заданной высоты, улетел слишком далеко или поднялся слишком высоко.
+- `scene` — расстояние, высота, боковое смещение, направление размещения и полный yaw/pitch/roll всего объекта.
+- `font` — встроенный `classic-5x7` или полностью свой bitmap-шрифт из `0/1` прямо в YAML.
+- `geometry` — ширина/высота одного pixel-voxel, общая глубина, толщина front/back слоёв, расстояние между буквами, подъём каждой следующей буквы, depth-step, зеркалирование и направление extrusion.
+- `randomness` — отдельные jitter и 3D-повороты букв, случайная глубина букв, а также jitter всей сцены по позиции и углам.
+- `palette` — независимые weighted-палитры front/side/back, режимы `per-block`, `per-character`, `solid`, плюс отдельная accent-палитра с шансом появления.
+- `noise` — количество, cluster size, зона, глубина и weighted материалы помех. Stained glass можно использовать как визуально прозрачные помехи.
+- `messages` — многострочные MiniMessage-сообщения с gradient/hex/hover/click и placeholders.
 
-`general` controls target server, CAPTCHA length, attempts, timeout, and verified-cache lifetime. `security` controls per-IP connection rate and the maximum number of active per-session Limbo worlds.
+## Полезные настройки
 
-### Limbo world
-
-`limbo.view-distance` and `limbo.simulation-distance` control how much of the generated world is delivered. The single pedestal block under the player can be enabled/disabled and its block material can be changed.
-
-### Player and camera
-
-`player.game-mode` supports `creative`, `adventure`, `survival`, or `spectator`. Position locking can be enabled with a configurable radius. Spawn X/Y/Z are configurable.
-
-The camera can automatically aim at the resolved CAPTCHA centre or use manual yaw/pitch. Separate yaw/pitch offsets are available for fine tuning.
-
-### Full scene position and rotation
-
-The whole CAPTCHA can be placed and oriented with:
+Массивная CAPTCHA под углом:
 
 ```yaml
 scene:
   distance-blocks: 30.0
-  forward-yaw-degrees: 0.0
-  lateral-offset-blocks: 0.0
   center-height-blocks: 8.0
   rotation:
     yaw-degrees: 28.0
-    pitch-degrees: 0.0
-    roll-degrees: 0.0
-```
-
-`forward-yaw-degrees` controls where the object is located around the player. `rotation.yaw-degrees` controls the strong receding-side perspective. `pitch` tilts the entire text up/down and `roll` rotates it clockwise/counter-clockwise.
-
-### Font
-
-The built-in `classic-5x7` font is available by default. Set `font.preset: custom` to define your own bitmap font directly in the same `config.yml` file. Every custom glyph is a matrix of `1` and `0`, so a server owner can completely replace the shape of every character without recompiling the plugin.
-
-The generated character alphabet is also configurable.
-
-### Size, fatness and 3D depth
-
-```yaml
-geometry:
-  pixel-width: 2
-  pixel-height: 2
-  depth-blocks: 3
-  letter-gap-blocks: 2
-  center-text: true
-```
-
-`pixel-width` controls horizontal stroke fatness. `pixel-height` controls vertical size. `depth-blocks` is the real extrusion thickness. `letter-gap-blocks` controls spacing between letters.
-
-### Randomness
-
-Randomness can be turned off completely or switched to a fixed seed for repeatable screenshots/tests. Per-character horizontal, vertical and depth jitter are configurable. Per-session scene jitter can change distance, height, placement yaw, object yaw, object pitch and object roll.
-
-### Materials / colors
-
-Minecraft color is controlled by block materials. pnCaptcha supports separate weighted palettes for the bright/front face, side/body layers and deepest/back layer.
-
-```yaml
-palette:
-  mode: "per-block"
-  front:
-    - block: "minecraft:polished_deepslate"
-      weight: 4
-    - block: "minecraft:cyan_terracotta"
-      weight: 1
-```
-
-Supported palette modes:
-
-- `per-block` — every voxel can independently select a weighted material.
-- `per-character` — each character keeps one front, side and back material.
-- `solid` — the first material in each palette is always used.
-
-Any valid block id can be configured. Use concrete/stone for opaque geometry or stained glass for transparent/translucent-looking interference and accents.
-
-### Noise / interference
-
-Noise is generated behind the readable face so it does not simply cover the code. Its count, horizontal/vertical padding, minimum/maximum depth and weighted materials are configurable. Glass defaults give the reference-style floating interference without making the text impossible to read.
-
-### Messages
-
-All player-facing strings are in `messages`. The wrong-answer message supports `{attempt}` and `{max}` placeholders.
-
-## Recommended visual starting point
-
-The shipped defaults aim for a large reference-style scene:
-
-```yaml
-scene:
-  distance-blocks: 30.0
-  rotation:
-    yaw-degrees: 28.0
-    pitch-degrees: 0.0
-    roll-degrees: 0.0
+    pitch-degrees: -3.0
+    roll-degrees: 2.0
 
 geometry:
-  pixel-width: 2
-  pixel-height: 2
-  depth-blocks: 3
-  letter-gap-blocks: 2
+  pixel-width: 3
+  pixel-height: 3
+  depth-blocks: 5
+  front-thickness-blocks: 1
+  back-thickness-blocks: 1
+  letter-gap-blocks: 3
 ```
 
-For an even more massive look, try `pixel-width: 3`, `pixel-height: 3`, and `depth-blocks: 4` or `5`, then raise `limbo.view-distance` if the scene becomes very large.
+Автовозврат после падения:
 
-## Build
+```yaml
+player:
+  recovery:
+    enabled: true
+    below-spawn-blocks: 8.0
+    above-spawn-blocks: 40.0
+    max-horizontal-distance-blocks: 48.0
+    cooldown-millis: 500
+    preserve-current-look: false
+```
+
+Небольшой разброс букв:
+
+```yaml
+randomness:
+  character:
+    vertical-jitter-blocks: 1
+    depth-jitter-blocks: 1
+    depth-variation-blocks: 1
+    rotation-yaw-jitter-degrees: 2.0
+    rotation-pitch-jitter-degrees: 1.0
+    rotation-roll-jitter-degrees: 1.0
+```
+
+Палитра задаётся Minecraft block-id и весом. Чем выше `weight`, тем чаще выбирается материал.
+
+## Сообщения
+
+`messages.*` принимает список строк MiniMessage. Например:
+
+```yaml
+messages:
+  update-available:
+    - "<gradient:#FFD166:#FF6B6B><bold>Доступно обновление pnCaptcha</bold></gradient>"
+    - "<gray>{current} <dark_gray>→ <green>{latest}</green>"
+    - "<click:open_url:'{url}'><aqua><underlined>Открыть релиз</underlined></aqua></click>"
+```
+
+Поддерживаемые placeholders зависят от события: `{attempt}`, `{max}`, `{timeout}`, `{reason}`, `{current}`, `{latest}`, `{url}`.
+
+## Проверка обновлений
+
+При запуске pnCaptcha может обратиться к `https://api.github.com/repos/<owner>/<repo>/releases/latest`. Проверка выполняется асинхронно. Если версия новее, в консоль выводится предупреждение, а игрокам с `updates.notify-permission` отправляется кликабельное сообщение.
+
+## Сборка
 
 ```bash
 gradle clean build
 ```
 
-The shaded plugin is written to:
+Готовый shaded JAR:
 
 ```text
-build/libs/pnCaptcha-0.4.0.jar
+build/libs/pnCaptcha-0.5.0.jar
 ```
