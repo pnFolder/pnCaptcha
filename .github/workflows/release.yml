@@ -1,13 +1,7 @@
 name: release
 
 on:
-  push:
-    branches:
-      - main
-
-concurrency:
-  group: pncaptcha-release
-  cancel-in-progress: true
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,64 +18,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.7.0'
-
       - name: Build and test
         run: gradle clean build --stacktrace
-
       - name: Verify release jar
         run: |
           test -f build/libs/pnCaptcha-0.5.0.jar
           jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
           jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'config.yml'
-          jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'ru/privatenull/pncaptcha/update/UpdateChecker.class'
-          jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'ru/privatenull/pncaptcha/message/MessageService.class'
-
-      - name: Remove all previous pnCaptcha releases and version tags
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
-            if [ -n "$tag" ]; then
-              echo "Deleting previous release $tag"
-              gh release delete "$tag" --cleanup-tag -y || true
-            fi
-          done
-
-          gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate --jq '.[].ref' | while read -r ref; do
-            tag="${ref#refs/tags/}"
-            if [ -n "$tag" ]; then
-              echo "Deleting previous version tag $tag"
-              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" || true
-            fi
-          done
-
-      - name: Publish pnCaptcha 0.5.0
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cat > release-notes.md <<'EOF'
-          ## pnCaptcha 0.5.0 — первый цельный публичный релиз
-
-          - **Архитектура.** Проверка работает на Velocity через LimboAPI. Для каждой активной CAPTCHA создаётся маленький in-memory VirtualWorld; Paper/backend не принимает непроверенного игрока. PacketEvents для pnCaptcha не требуется.
-          - **Надёжный 3D-рендер.** Блоки CAPTCHA находятся внутри самого Limbo-мирa до входа игрока, поэтому поздняя загрузка чанков больше не стирает изображение.
-          - **Полная геометрия.** Настраиваются distance, height, lateral offset, yaw, pitch, roll, ширина и высота voxel-пикселя, общая глубина, толщина front/back, расстояние между символами, постепенный подъём и depth-step букв, зеркалирование и направление extrusion.
-          - **Шрифты.** Есть встроенный читаемый `classic-5x7` и полностью пользовательский bitmap-шрифт из `0/1` прямо в `config.yml`. Алфавит генератора тоже задаётся конфигом.
-          - **Палитры и цвета.** Отдельные weighted-палитры для front/side/back, режимы `per-block`, `per-character`, `solid`, а также accent-палитра с настраиваемым шансом появления ярких блоков.
-          - **Рандомизация.** Регулируются смещения букв, случайная дополнительная глубина, индивидуальные yaw/pitch/roll букв, а также jitter всей сцены по дистанции, высоте, боковому смещению и углам.
-          - **Помехи.** Настраиваются количество, размер cluster, зона, глубина и weighted материалы. Для полупрозрачного визуального эффекта можно использовать stained glass.
-          - **Игрок и камера.** Настраиваются game mode, spawn, auto-aim/manual camera, lock radius, размер и материал платформы, свет Limbo, view/simulation distance и автоматическое расширение видимой области.
-          - **Возврат после падения.** При включённом recovery работает гравитация; игрок автоматически возвращается на точку проверки, если упал ниже заданной высоты, поднялся слишком высоко или улетел дальше разрешённого радиуса. Есть cooldown, сохранение направления взгляда и отдельное сообщение.
-          - **Сообщения.** Все сообщения многострочные и настраиваются через MiniMessage: gradient, HEX-цвета, hover, click и placeholders. Стандартные тексты оформлены на русском.
-          - **Проверка обновлений.** При запуске pnCaptcha асинхронно проверяет последний GitHub Release. Консоль получает статус, а игроки с `pncaptcha.admin` — кликабельную ссылку на новый релиз.
-          - **Защита от нагрузки.** Есть IP rate-limit, TTL cache для проверенных UUID/IP и лимит одновременно активных CAPTCHA-миров.
-          - **Один конфиг.** Всё находится в `plugins/pncaptcha/config.yml`. Старый `config.properties` удалён. Конфиг до схемы `config-version: 1` сохраняется в backup и заменяется полной актуальной конфигурацией.
-
-          **Требования:** Java 21+, Velocity 3.5.x, LimboAPI 1.1.26+.
-          EOF
-
-          gh release create v0.5.0 \
-            build/libs/pnCaptcha-0.5.0.jar \
-            --target "$GITHUB_SHA" \
-            --title 'pnCaptcha 0.5.0 — Полная 3D CAPTCHA для Velocity' \
-            --notes-file release-notes.md
+      - name: Publish
+        run: echo 'Use this workflow intentionally for the next public pnCaptcha release.'
