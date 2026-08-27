@@ -43,24 +43,29 @@ class CoreServicesTest {
     }
 
     @Test
-    fun `layout creates deterministic volumetric frame`() {
+    fun `layout creates deterministic deep volumetric frame`() {
         val layout = CaptchaLayout(random = Random(42))
         val frame = layout.build(
             answer = "A2B3C",
-            glyphMaterials = listOf("minecraft:white_concrete"),
-            sideMaterial = "minecraft:deepslate_tiles",
+            glyphMaterials = listOf("minecraft:gray_concrete"),
+            sideMaterials = listOf("minecraft:deepslate_tiles", "minecraft:blackstone"),
             noiseMaterial = "minecraft:gray_stained_glass",
             noiseCount = 10,
             scale = 2,
-            depth = 3
+            depth = 5
         )
 
         assertTrue(frame.isNotEmpty())
         assertEquals(frame.keys.size, frame.size)
         assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z })
         assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 1 })
-        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 2 })
-        assertTrue(frame.keys.any { it.z > CaptchaLayout.DEFAULT_FRONT_Z + 2 })
+        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 4 })
+        assertTrue(frame.keys.any { it.z > CaptchaLayout.DEFAULT_FRONT_Z + 5 })
+
+        // The presentation is deliberately offset to +X while the camera is
+        // offset to -X, which creates the oblique view used to reveal depth.
+        assertTrue(frame.keys.maxOf { it.x } > CaptchaLayout.DEFAULT_CENTER_X)
+        assertTrue(frame.keys.minOf { it.x } < CaptchaLayout.DEFAULT_CENTER_X)
     }
 
     @Test
