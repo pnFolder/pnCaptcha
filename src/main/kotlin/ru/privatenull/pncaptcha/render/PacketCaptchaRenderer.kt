@@ -3,7 +3,7 @@ package ru.privatenull.pncaptcha.render
 import com.github.retrooper.packetevents.PacketEvents
 import com.github.retrooper.packetevents.protocol.world.states.WrappedBlockState
 import com.github.retrooper.packetevents.util.Vector3i
-import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBlockChange
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerMultiBlockChange
 import com.velocitypowered.api.proxy.Player
 import ru.privatenull.pncaptcha.captcha.BlockPos
 import ru.privatenull.pncaptcha.captcha.CaptchaLayout
@@ -12,10 +12,9 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Sends fake block updates directly to one client.
- *
- * The underlying Limbo world stays unchanged, so each player can see a different
- * CAPTCHA while every connection shares the same in-memory Limbo instance.
+ * Sends client-only fake blocks. Changes are grouped by 16x16x16 chunk section
+ * and sent through MULTI_BLOCK_CHANGE instead of thousands of individual block
+ * packets. This is both cheaper and much less likely to lose a large frame.
  */
 class PacketCaptchaRenderer(
     private val config: CaptchaConfig,
@@ -35,28 +34,23 @@ class PacketCaptchaRenderer(
             sideMaterials = config.glyphSideMaterials,
             noiseMaterial = config.noiseMaterial,
             noiseCount = config.noiseBlocks,
-            scale = config.glyphScale,
+            scaleX = config.glyphScaleX,
+            scaleY = config.glyphScaleY,
             depth = config.glyphDepth
         )
 
         val air = WrappedBlockState.getByString(clientVersion, "minecraft:air")
+        val changes = LinkedHashMap<BlockPos, WrappedBlockState>()
+
         previous.asSequence()
             .filterNot(next::containsKey)
-            .forEach { position ->
-                playerManager.sendPacket(
-                    player,
-                    WrapperPlayServerBlockChange(position.toVector(), air)
-                )
-            }
+            .forEach { changes[it] = air }
 
         next.forEach { (position, material) ->
-            val state = WrappedBlockState.getByString(clientVersion, material)
-            playerManager.sendPacket(
-                player,
-                WrapperPlayServerBlockChange(position.toVector(), state)
-            )
+            changes[position] = WrappedBlockState.getByString(clientVersion, material)
         }
 
+        sendBatched(player, changes)
         renderedPositions[player.uniqueId] = next.keys.toSet()
         user.flushPackets()
         return true
@@ -65,22 +59,53 @@ class PacketCaptchaRenderer(
     fun clear(player: Player) {
         val previous = renderedPositions.remove(player.uniqueId) ?: return
         val playerManager = PacketEvents.getAPI().getPlayerManager()
-        if (playerManager.getUser(player) == null) return
+        val user = playerManager.getUser(player) ?: return
         val clientVersion = playerManager.getClientVersion(player)
         val air = WrappedBlockState.getByString(clientVersion, "minecraft:air")
 
-        previous.forEach { position ->
-            playerManager.sendPacket(
-                player,
-                WrapperPlayServerBlockChange(position.toVector(), air)
-            )
-        }
-        playerManager.getUser(player)?.flushPackets()
+        val changes = previous.associateWith { air }
+        sendBatched(player, changes)
+        user.flushPackets()
     }
 
     fun forget(playerId: UUID) {
         renderedPositions.remove(playerId)
     }
 
-    private fun BlockPos.toVector(): Vector3i = Vector3i(x, y, z)
+    private fun sendBatched(player: Player, changes: Map<BlockPos, WrappedBlockState>) {
+        if (changes.isEmpty()) return
+
+        val playerManager = PacketEvents.getAPI().getPlayerManager()
+        changes.entries
+            .groupBy { SectionPos.from(it.key) }
+            .forEach { (section, entries) ->
+                val encoded = entries.map { (position, state) ->
+                    WrapperPlayServerMultiBlockChange.EncodedBlock(
+                        state,
+                        position.x,
+                        position.y,
+                        position.z
+                    )
+                }.toTypedArray()
+
+                playerManager.sendPacket(
+                    player,
+                    WrapperPlayServerMultiBlockChange(
+                        Vector3i(section.x, section.y, section.z),
+                        null,
+                        encoded
+                    )
+                )
+            }
+    }
+
+    private data class SectionPos(val x: Int, val y: Int, val z: Int) {
+        companion object {
+            fun from(position: BlockPos): SectionPos = SectionPos(
+                x = position.x shr 4,
+                y = position.y shr 4,
+                z = position.z shr 4
+            )
+        }
+    }
 }
