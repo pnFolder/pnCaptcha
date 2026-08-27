@@ -33,11 +33,17 @@ object CaptchaConfigLoader {
             maxAttempts = properties.int("max-attempts", 3),
             timeout = Duration.ofSeconds(properties.long("timeout-seconds", 30)),
             verifiedCacheTtl = Duration.ofMinutes(properties.long("verified-cache-minutes", 720)),
-            noiseBlocks = properties.int("noise-blocks", 12),
+            noiseBlocks = properties.int("noise-blocks", 8),
             maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
             joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
-            glyphScale = properties.int("glyph-scale", 2),
-            glyphDepth = properties.int("glyph-depth", 5),
+
+            // 0.2.2 used glyph-scale=2. Do not inherit that value here: a 2x
+            // horizontal face can span chunks LimboAPI has not sent yet and the
+            // client simply discards those fake block changes. The new default
+            // keeps the face narrow but tall, while Z depth provides the mass.
+            glyphScaleX = properties.int("glyph-scale-x", 1),
+            glyphScaleY = properties.int("glyph-scale-y", 2),
+            glyphDepth = properties.int("glyph-depth", 6),
             glyphMaterials = properties.string("glyph-materials", DEFAULT_GLYPH_MATERIALS)
                 .split(',')
                 .map(String::trim)
@@ -54,11 +60,12 @@ object CaptchaConfigLoader {
             setProperty("max-attempts", "3")
             setProperty("timeout-seconds", "30")
             setProperty("verified-cache-minutes", "720")
-            setProperty("noise-blocks", "12")
+            setProperty("noise-blocks", "8")
             setProperty("max-joins-per-window", "6")
             setProperty("join-window-seconds", "10")
-            setProperty("glyph-scale", "2")
-            setProperty("glyph-depth", "5")
+            setProperty("glyph-scale-x", "1")
+            setProperty("glyph-scale-y", "2")
+            setProperty("glyph-depth", "6")
             setProperty("glyph-materials", DEFAULT_GLYPH_MATERIALS)
             setProperty("glyph-side-materials", DEFAULT_SIDE_MATERIALS)
             setProperty("noise-material", "minecraft:gray_stained_glass")
