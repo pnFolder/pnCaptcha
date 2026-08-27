@@ -43,18 +43,24 @@ class CoreServicesTest {
     }
 
     @Test
-    fun `layout creates deterministic non-overlapping frame`() {
+    fun `layout creates deterministic volumetric frame`() {
         val layout = CaptchaLayout(random = Random(42))
         val frame = layout.build(
             answer = "A2B3C",
             glyphMaterials = listOf("minecraft:white_concrete"),
+            sideMaterial = "minecraft:deepslate_tiles",
             noiseMaterial = "minecraft:gray_stained_glass",
-            noiseCount = 10
+            noiseCount = 10,
+            scale = 2,
+            depth = 3
         )
 
         assertTrue(frame.isNotEmpty())
         assertEquals(frame.keys.size, frame.size)
-        assertTrue(frame.keys.all { it.z == CaptchaLayout.DEFAULT_PLANE_Z })
+        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z })
+        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 1 })
+        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 2 })
+        assertTrue(frame.keys.any { it.z > CaptchaLayout.DEFAULT_FRONT_Z + 2 })
     }
 
     @Test
