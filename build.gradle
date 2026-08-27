@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '0.1.0-SNAPSHOT'
+version = '0.2.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
@@ -13,15 +13,32 @@ repositories {
         name = 'papermc'
         url = uri('https://repo.papermc.io/repository/maven-public/')
     }
+    maven {
+        name = 'elytrium'
+        url = uri('https://maven.elytrium.net/repo/')
+    }
+    maven {
+        name = 'codemc-releases'
+        url = uri('https://repo.codemc.io/repository/maven-releases/')
+    }
 }
 
 dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     kapt 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
 
+    // LimboAPI keeps unverified players off the real Paper servers.
+    compileOnly 'net.elytrium.limboapi:api:1.1.26'
+
+    // PacketEvents is used only for per-player fake block overlays.
+    // The CAPTCHA glyphs never become real blocks in the Limbo world.
+    compileOnly 'com.github.retrooper:packetevents-velocity:2.13.0'
+
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
+    testImplementation 'net.elytrium.limboapi:api:1.1.26'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
 }
 
@@ -35,6 +52,18 @@ kotlin {
     jvmToolchain(21)
 }
 
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
+        freeCompilerArgs.add('-Xjvm-default=all')
+    }
+}
+
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
 }
@@ -46,6 +75,7 @@ tasks.named('jar') {
 tasks.named('shadowJar') {
     archiveFileName = "pnCaptcha-${project.version}.jar"
     archiveClassifier = ''
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.named('build') {
