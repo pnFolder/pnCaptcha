@@ -25,7 +25,7 @@ import java.nio.file.Path
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.2.0-SNAPSHOT",
+    version = "0.2.0",
     description = "Packet-rendered block CAPTCHA in a shared Velocity Limbo",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
@@ -69,7 +69,7 @@ class PnCaptchaPlugin @Inject constructor(
 
         logger.info(
             "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={})",
-            "0.2.0-SNAPSHOT",
+            "0.2.0",
             proxy.version.version,
             config.targetServer,
             config.timeout.seconds,
