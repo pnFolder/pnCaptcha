@@ -95,9 +95,20 @@ class CaptchaManager(
     fun onSpawn(playerId: UUID, sessionId: UUID, limboPlayer: LimboPlayer) {
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
         session.limboPlayer = limboPlayer
-        limboPlayer.disableFalling()
+
         limboPlayer.setGameMode(environment.gameMode)
         limboPlayer.sendAbilities()
+
+        // LimboAPI's disableFalling() forcibly puts the client into a flying
+        // state. Recovery is intended to catch a real fall, so gravity must be
+        // enabled whenever recovery is enabled. If recovery is disabled we keep
+        // the old floating behaviour for servers that want a fixed void scene.
+        if (config.player.recovery.enabled) {
+            limboPlayer.enableFalling()
+        } else {
+            limboPlayer.disableFalling()
+        }
+
         teleportToCamera(sessionId, limboPlayer, null, null)
 
         val becameWaiting = synchronized(session) {
