@@ -43,29 +43,29 @@ class CoreServicesTest {
     }
 
     @Test
-    fun `layout creates deterministic deep volumetric frame`() {
+    fun `layout creates chunk safe deep volumetric frame`() {
         val layout = CaptchaLayout(random = Random(42))
         val frame = layout.build(
             answer = "A2B3C",
             glyphMaterials = listOf("minecraft:gray_concrete"),
             sideMaterials = listOf("minecraft:deepslate_tiles", "minecraft:blackstone"),
             noiseMaterial = "minecraft:gray_stained_glass",
-            noiseCount = 10,
-            scale = 2,
-            depth = 5
+            noiseCount = 0,
+            scaleX = 1,
+            scaleY = 2,
+            depth = 6
         )
 
         assertTrue(frame.isNotEmpty())
         assertEquals(frame.keys.size, frame.size)
         assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z })
-        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 1 })
-        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 4 })
-        assertTrue(frame.keys.any { it.z > CaptchaLayout.DEFAULT_FRONT_Z + 5 })
+        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 5 })
 
-        // The presentation is deliberately offset to +X while the camera is
-        // offset to -X, which creates the oblique view used to reveal depth.
-        assertTrue(frame.keys.maxOf { it.x } > CaptchaLayout.DEFAULT_CENTER_X)
-        assertTrue(frame.keys.minOf { it.x } < CaptchaLayout.DEFAULT_CENTER_X)
+        // With the default five-character CAPTCHA the face is only 29 blocks
+        // wide and all volume stays in X chunks -1/0 and Z chunks 0/1.
+        // Those are available immediately around the default spawn chunk.
+        assertTrue(frame.keys.all { it.x in -15..15 })
+        assertTrue(frame.keys.all { it.z in 14..19 })
     }
 
     @Test
