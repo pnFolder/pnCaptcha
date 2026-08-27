@@ -55,11 +55,11 @@ data class CaptchaConfig(
         require(general.targetServer.isNotBlank()) { "general.target-server must not be blank" }
         require(general.captchaLength in 3..12) { "general.captcha-length must be between 3 and 12" }
         require(general.maxAttempts in 1..10) { "general.max-attempts must be between 1 and 10" }
-        require(general.timeoutSeconds in 5..300) { "general.timeout-seconds must be between 5 and 300" }
-        require(general.verifiedCacheMinutes in 1..43_200) { "general.verified-cache-minutes must be between 1 and 43200" }
+        require(general.timeoutSeconds in 5L..300L) { "general.timeout-seconds must be between 5 and 300" }
+        require(general.verifiedCacheMinutes in 1L..43_200L) { "general.verified-cache-minutes must be between 1 and 43200" }
 
         require(security.maxJoinsPerWindow in 1..10_000) { "security.max-joins-per-window must be between 1 and 10000" }
-        require(security.joinWindowSeconds in 1..3600) { "security.join-window-seconds must be between 1 and 3600" }
+        require(security.joinWindowSeconds in 1L..3600L) { "security.join-window-seconds must be between 1 and 3600" }
         require(security.maxActiveCaptchas in 1..10_000) { "security.max-active-captchas must be between 1 and 10000" }
 
         require(limbo.viewDistance in 2..32) { "limbo.view-distance must be between 2 and 32" }
@@ -88,6 +88,9 @@ data class CaptchaConfig(
         require(geometry.depthBlocks in 1..16) { "geometry.depth-blocks must be between 1 and 16" }
         require(geometry.letterGapBlocks in 0..16) { "geometry.letter-gap-blocks must be between 0 and 16" }
 
+        require(randomness.seedMode.lowercase() in setOf("random", "fixed")) {
+            "randomness.seed-mode must be random or fixed"
+        }
         require(randomness.character.horizontalJitterBlocks in 0..8)
         require(randomness.character.verticalJitterBlocks in 0..8)
         require(randomness.character.depthJitterBlocks in 0..8)
