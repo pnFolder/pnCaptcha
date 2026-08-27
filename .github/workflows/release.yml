@@ -24,19 +24,19 @@ jobs:
         run: gradle clean build --stacktrace
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.2.4.jar
-          jar tf build/libs/pnCaptcha-0.2.4.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.2.4.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-      - name: Publish v0.2.4
+          test -f build/libs/pnCaptcha-0.2.5.jar
+          jar tf build/libs/pnCaptcha-0.2.5.jar | grep -q 'velocity-plugin.json'
+          jar tf build/libs/pnCaptcha-0.2.5.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
+      - name: Publish v0.2.5
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.4 >/dev/null 2>&1; then
-            echo 'Release v0.2.4 already exists; skipping.'
+          if gh release view v0.2.5 >/dev/null 2>&1; then
+            echo 'Release v0.2.5 already exists; skipping.'
           else
-            gh release create v0.2.4 \
-              build/libs/pnCaptcha-0.2.4.jar \
+            gh release create v0.2.5 \
+              build/libs/pnCaptcha-0.2.5.jar \
               --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.2.4' \
-              --notes 'True angled-scene update: the whole CAPTCHA plane is physically rotated in X/Z, defaults to 30 blocks away, keeps real 3-block extrusion, supports configurable distance/angle/height/fatness/depth/gap/jitter, automatically aims the camera, pre-creates configured Limbo chunks, and keeps batched post-chunk overlay refreshes.'
+              --title 'pnCaptcha 0.2.5' \
+              --notes 'Angled 3D CAPTCHA scene with automatic config migration: physical X/Z plane rotation, 30-block default distance, configurable angle/height/fatness/depth/gap/jitter, automatic camera aiming, dynamic Limbo chunk preparation, batched fake-block rendering, and post-chunk refreshes.'
           fi
