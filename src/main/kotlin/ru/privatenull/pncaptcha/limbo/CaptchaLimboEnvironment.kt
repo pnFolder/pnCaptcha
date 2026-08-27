@@ -7,38 +7,31 @@ import net.elytrium.limboapi.api.LimboSessionHandler
 import net.elytrium.limboapi.api.chunk.Dimension
 import net.elytrium.limboapi.api.chunk.VirtualBlock
 import net.elytrium.limboapi.api.player.GameMode
+import ru.privatenull.pncaptcha.captcha.CaptchaFont
 import ru.privatenull.pncaptcha.captcha.CaptchaLayout
 import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfig
+import java.security.SecureRandom
+import java.util.Random
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.floor
 
-/**
- * Creates one tiny in-memory Limbo world per active CAPTCHA session.
- *
- * This replaces the old PacketEvents fake-block overlay. Every glyph voxel is
- * written into LimboAPI's VirtualWorld before the player joins, so the normal
- * chunk packets contain the CAPTCHA themselves. Late chunk delivery can no
- * longer erase the challenge and unloaded-chunk block-change packets are no
- * longer part of the design.
- *
- * These are not Minecraft world folders and nothing is saved to disk. A world
- * exists only for the lifetime of one verification session and is disposed as
- * soon as that session ends.
- */
+/** One tiny in-memory Limbo world per active CAPTCHA session. */
 class CaptchaLimboEnvironment(
     private val factory: LimboFactory,
     private val config: CaptchaConfig,
     private val layout: CaptchaLayout = CaptchaLayout()
 ) : AutoCloseable {
-    private val activeLimbos = ConcurrentHashMap<UUID, Limbo>()
+    private val activeLimbos = ConcurrentHashMap<UUID, SessionWorld>()
+    private val font: CaptchaFont.ResolvedFont = CaptchaFont.resolve(config.font)
 
-    val spawnX: Double = CaptchaScene.SPAWN_X
-    val spawnY: Double = CaptchaScene.SPAWN_Y
-    val spawnZ: Double = CaptchaScene.SPAWN_Z
-    val spawnYaw: Float = CaptchaScene.spawnYaw(config)
-    val spawnPitch: Float = CaptchaScene.spawnPitch(config)
-    val gameMode: GameMode = if (config.creativeMode) GameMode.CREATIVE else GameMode.ADVENTURE
+    val gameMode: GameMode = when (config.player.gameMode.lowercase()) {
+        "survival" -> GameMode.SURVIVAL
+        "adventure" -> GameMode.ADVENTURE
+        "spectator" -> GameMode.SPECTATOR
+        else -> GameMode.CREATIVE
+    }
 
     fun spawn(
         sessionId: UUID,
@@ -48,24 +41,31 @@ class CaptchaLimboEnvironment(
     ): ChallengeInfo {
         dispose(sessionId)
 
+        val random = sessionRandom()
+        val scene = CaptchaScene.resolve(config, random)
+        val frame = layout.build(answer, config, font, scene, random)
+        val bounds = CaptchaScene.chunkBounds(config, scene, font)
+        val camera = scene.camera
+
         val world = factory.createVirtualWorld(
             Dimension.OVERWORLD,
-            spawnX,
-            spawnY,
-            spawnZ,
-            spawnYaw,
-            spawnPitch
+            camera.x,
+            camera.y,
+            camera.z,
+            camera.yaw,
+            camera.pitch
         )
 
-        val pedestal = factory.createSimpleBlock("minecraft:deepslate_tiles")
-        world.setBlock(
-            CaptchaScene.PEDESTAL_X,
-            CaptchaScene.PEDESTAL_Y,
-            CaptchaScene.PEDESTAL_Z,
-            pedestal
-        )
+        if (config.limbo.pedestalEnabled) {
+            val pedestal = factory.createSimpleBlock(config.limbo.pedestalBlock)
+            world.setBlock(
+                floor(camera.x).toInt(),
+                floor(camera.y).toInt() - 1,
+                floor(camera.z).toInt(),
+                pedestal
+            )
+        }
 
-        val frame = layout.build(answer, config)
         val blockCache = HashMap<String, VirtualBlock>()
         frame.forEach { (position, materialId) ->
             val block = blockCache.getOrPut(materialId) {
@@ -74,10 +74,6 @@ class CaptchaLimboEnvironment(
             world.setBlock(position.x, position.y, position.z, block)
         }
 
-        // Ensure every chunk exists before Limbo prepares its initial and
-        // delayed chunk packets. Because the blocks live in VirtualWorld, a
-        // chunk arriving later still contains the correct CAPTCHA blocks.
-        val bounds = CaptchaScene.chunkBounds(config)
         for (chunkX in bounds.minX..bounds.maxX) {
             for (chunkZ in bounds.minZ..bounds.maxZ) {
                 world.getChunkOrNew(chunkX, chunkZ)
@@ -87,45 +83,75 @@ class CaptchaLimboEnvironment(
         world.fillSkyLight(15)
         world.fillBlockLight(15)
 
+        val viewDistance = CaptchaScene.recommendedViewDistance(config, bounds)
+        val simulationDistance = minOf(config.limbo.simulationDistance, viewDistance)
+
         val limbo = factory.createLimbo(world)
             .setName("pnCaptcha-${sessionId.toString().take(8)}")
             .setGameMode(gameMode)
             .setReadTimeout(config.timeout.toMillis().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() + 5_000)
-            .setViewDistance(config.limboViewDistance)
-            .setSimulationDistance(config.limboSimulationDistance)
-            .setReducedDebugInfo(false)
+            .setViewDistance(viewDistance)
+            .setSimulationDistance(simulationDistance)
+            .setReducedDebugInfo(config.limbo.reducedDebugInfo)
             .setShouldRespawn(true)
             .setShouldRejoin(true)
 
-        activeLimbos[sessionId] = limbo
+        val sessionWorld = SessionWorld(limbo, scene, bounds, frame.size)
+        activeLimbos[sessionId] = sessionWorld
 
         try {
             limbo.spawnPlayer(player, handler)
         } catch (throwable: Throwable) {
-            activeLimbos.remove(sessionId, limbo)
+            activeLimbos.remove(sessionId, sessionWorld)
             limbo.dispose()
             throw throwable
         }
 
         return ChallengeInfo(
             blockCount = frame.size,
-            chunkBounds = bounds
+            chunkBounds = bounds,
+            scene = scene,
+            viewDistance = viewDistance,
+            simulationDistance = simulationDistance
         )
     }
 
+    fun camera(sessionId: UUID): CaptchaScene.CameraPose? = activeLimbos[sessionId]?.scene?.camera
+
     fun dispose(sessionId: UUID) {
-        activeLimbos.remove(sessionId)?.dispose()
+        activeLimbos.remove(sessionId)?.limbo?.dispose()
     }
 
     fun activeCount(): Int = activeLimbos.size
 
+    fun resolvedFont(): CaptchaFont.ResolvedFont = font
+
     override fun close() {
-        activeLimbos.values.forEach(Limbo::dispose)
+        activeLimbos.values.forEach { it.limbo.dispose() }
         activeLimbos.clear()
     }
 
+    private fun sessionRandom(): Random {
+        if (!config.randomness.enabled) return Random(0L)
+        return if (config.randomness.seedMode.equals("fixed", ignoreCase = true)) {
+            Random(config.randomness.fixedSeed)
+        } else {
+            SecureRandom()
+        }
+    }
+
+    private data class SessionWorld(
+        val limbo: Limbo,
+        val scene: CaptchaScene.ResolvedScene,
+        val bounds: CaptchaScene.ChunkBounds,
+        val blockCount: Int
+    )
+
     data class ChallengeInfo(
         val blockCount: Int,
-        val chunkBounds: CaptchaScene.ChunkBounds
+        val chunkBounds: CaptchaScene.ChunkBounds,
+        val scene: CaptchaScene.ResolvedScene,
+        val viewDistance: Int,
+        val simulationDistance: Int
     )
 }
