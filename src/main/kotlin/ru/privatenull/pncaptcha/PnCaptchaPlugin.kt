@@ -13,8 +13,8 @@ import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import org.slf4j.Logger
 import ru.privatenull.pncaptcha.cache.VerificationCache
+import ru.privatenull.pncaptcha.captcha.CaptchaFont
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
-import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.manager.CaptchaManager
@@ -25,8 +25,8 @@ import java.nio.file.Path
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.3.0",
-    description = "Per-session LimboAPI 3D voxel CAPTCHA for Velocity",
+    version = "0.4.0",
+    description = "Fully configurable LimboAPI 3D voxel CAPTCHA for Velocity",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
     dependencies = [Dependency(id = "limboapi")]
@@ -43,6 +43,7 @@ class PnCaptchaPlugin @Inject constructor(
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
         val config = CaptchaConfigLoader.load(dataDirectory)
+        val font = CaptchaFont.resolve(config.font)
         val factory = resolveLimboFactory()
         val limboEnvironment = CaptchaLimboEnvironment(factory, config)
         val sessionManager = CaptchaSessionManager()
@@ -56,41 +57,33 @@ class PnCaptchaPlugin @Inject constructor(
             logger = logger,
             config = config,
             environment = limboEnvironment,
-            generator = CaptchaGenerator(),
+            generator = CaptchaGenerator(font.alphabet),
             sessions = sessionManager,
             cache = verificationCache,
             rateLimiter = rateLimiter
         )
 
         logger.info(
-            "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={})",
-            "0.3.0",
-            proxy.version.version,
-            config.targetServer,
-            config.timeout.seconds,
-            config.maxAttempts
+            "pnCaptcha 0.4.0 initialized on Velocity {}. Config: plugins/pncaptcha/config.yml",
+            proxy.version.version
         )
         logger.info(
-            "Renderer=Limbo VirtualWorld; PacketEvents is no longer required. " +
-                "distance={} blocks, angle={}°, face={}x{}, depth={}, view={}, simulation={}, creative={}",
-            config.captchaDistanceBlocks,
-            config.captchaAngleDegrees,
-            config.glyphScaleX,
-            config.glyphScaleY,
-            config.glyphDepth,
-            config.limboViewDistance,
-            config.limboSimulationDistance,
-            config.creativeMode
-        )
-
-        val bounds = CaptchaScene.chunkBounds(config)
-        logger.info(
-            "Configured CAPTCHA volume spans chunks X {}..{}, Z {}..{}. " +
-                "These chunks are created before each session Limbo is prepared.",
-            bounds.minX,
-            bounds.maxX,
-            bounds.minZ,
-            bounds.maxZ
+            "Scene: distance={} yaw={} pitch={} roll={} | font={} {}x{} | voxel={}x{}x{} | palette={} | noise={}x{} | Limbo view/sim={}/{}",
+            config.scene.distanceBlocks,
+            config.scene.rotationYawDegrees,
+            config.scene.rotationPitchDegrees,
+            config.scene.rotationRollDegrees,
+            config.font.preset,
+            font.width,
+            font.height,
+            config.geometry.pixelWidth,
+            config.geometry.pixelHeight,
+            config.geometry.depthBlocks,
+            config.palette.mode,
+            config.noise.enabled,
+            config.noise.count,
+            config.limbo.viewDistance,
+            config.limbo.simulationDistance
         )
     }
 
