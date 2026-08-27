@@ -25,8 +25,8 @@ import java.nio.file.Path
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.2.2",
-    description = "Perspective 3D packet-rendered block CAPTCHA in a shared Velocity Limbo",
+    version = "0.2.3",
+    description = "Chunk-safe perspective 3D packet CAPTCHA in a shared Velocity Limbo",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
     dependencies = [
@@ -68,16 +68,17 @@ class PnCaptchaPlugin @Inject constructor(
         )
 
         logger.info(
-            "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={}, scale={}x, depth={})",
-            "0.2.2",
+            "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={}, scale={}x{}, depth={})",
+            "0.2.3",
             proxy.version.version,
             config.targetServer,
             config.timeout.seconds,
             config.maxAttempts,
-            config.glyphScale,
+            config.glyphScaleX,
+            config.glyphScaleY,
             config.glyphDepth
         )
-        logger.info("CAPTCHA glyphs use corrected screen orientation and real Z extrusion viewed from an oblique camera.")
+        logger.info("CAPTCHA overlay is chunk-safe, batched by chunk section, and refreshed after Limbo chunk delivery.")
     }
 
     @Subscribe
