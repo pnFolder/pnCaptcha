@@ -1,184 +1,235 @@
 package ru.privatenull.pncaptcha.config
 
+import org.yaml.snakeyaml.Yaml
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
-import java.util.Properties
+import java.nio.file.StandardCopyOption
 
 object CaptchaConfigLoader {
-    private const val FILE_NAME = "config.properties"
-    private const val CONFIG_VERSION = 6
+    private const val FILE_NAME = "config.yml"
 
     fun load(dataDirectory: Path): CaptchaConfig {
         Files.createDirectories(dataDirectory)
         val path = dataDirectory.resolve(FILE_NAME)
 
         if (Files.notExists(path)) {
-            writeDefaults(path)
+            copyDefault(path)
         }
 
-        val properties = Properties()
-        Files.newInputStream(path).use(properties::load)
-
-        if (migrateAndFillDefaults(properties)) {
-            store(path, properties)
+        val root = Files.newBufferedReader(path).use { reader ->
+            @Suppress("UNCHECKED_CAST")
+            (Yaml().load<Any?>(reader) as? Map<String, Any?>).orEmpty()
         }
 
-        val legacySideMaterial = properties.string("glyph-side-material", "")
-        val sideMaterials = properties.string(
-            "glyph-side-materials",
-            if (legacySideMaterial.isNotEmpty()) legacySideMaterial else DEFAULT_SIDE_MATERIALS
-        ).split(',')
-            .map(String::trim)
-            .filter(String::isNotEmpty)
+        val defaults = CaptchaConfig()
 
         return CaptchaConfig(
-            targetServer = properties.string("target-server", "lobby"),
-            captchaLength = properties.int("captcha-length", 5),
-            maxAttempts = properties.int("max-attempts", 3),
-            timeout = Duration.ofSeconds(properties.long("timeout-seconds", 30)),
-            verifiedCacheTtl = Duration.ofMinutes(properties.long("verified-cache-minutes", 720)),
-            noiseBlocks = properties.int("noise-blocks", 8),
-            maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
-            joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
-            maxActiveCaptchas = properties.int("max-active-captchas", 128),
-
-            creativeMode = properties.bool("creative-mode", true),
-            lockPlayerPosition = properties.bool("lock-player-position", false),
-
-            limboViewDistance = properties.int("limbo-view-distance", 8),
-            limboSimulationDistance = properties.int("limbo-simulation-distance", 6),
-
-            captchaDistanceBlocks = properties.double("captcha-distance-blocks", 30.0),
-            captchaAngleDegrees = properties.double("captcha-angle-degrees", 28.0),
-            captchaCenterHeightBlocks = properties.double("captcha-center-height-blocks", 8.0),
-            cameraPitchOffsetDegrees = properties.double("camera-pitch-offset-degrees", 0.0),
-
-            glyphScaleX = properties.int("glyph-scale-x", 2),
-            glyphScaleY = properties.int("glyph-scale-y", 2),
-            glyphDepth = properties.int("glyph-depth", 3),
-            glyphGapBlocks = properties.int("glyph-gap-blocks", 2),
-            glyphJitterYBlocks = properties.int("glyph-jitter-y-blocks", 1),
-            glyphJitterDepthBlocks = properties.int("glyph-jitter-depth-blocks", 1),
-            glyphMaterials = properties.string("glyph-materials", DEFAULT_GLYPH_MATERIALS)
-                .split(',')
-                .map(String::trim)
-                .filter(String::isNotEmpty),
-            glyphSideMaterials = sideMaterials.ifEmpty { DEFAULT_SIDE_MATERIALS.split(',') },
-            noiseMaterial = properties.string("noise-material", "minecraft:gray_stained_glass")
+            general = GeneralConfig(
+                targetServer = root.string("general.target-server", defaults.general.targetServer),
+                captchaLength = root.int("general.captcha-length", defaults.general.captchaLength),
+                maxAttempts = root.int("general.max-attempts", defaults.general.maxAttempts),
+                timeoutSeconds = root.long("general.timeout-seconds", defaults.general.timeoutSeconds),
+                verifiedCacheMinutes = root.long("general.verified-cache-minutes", defaults.general.verifiedCacheMinutes)
+            ),
+            security = SecurityConfig(
+                maxJoinsPerWindow = root.int("security.max-joins-per-window", defaults.security.maxJoinsPerWindow),
+                joinWindowSeconds = root.long("security.join-window-seconds", defaults.security.joinWindowSeconds),
+                maxActiveCaptchas = root.int("security.max-active-captchas", defaults.security.maxActiveCaptchas)
+            ),
+            limbo = LimboConfig(
+                viewDistance = root.int("limbo.view-distance", defaults.limbo.viewDistance),
+                simulationDistance = root.int("limbo.simulation-distance", defaults.limbo.simulationDistance),
+                reducedDebugInfo = root.bool("limbo.reduced-debug-info", defaults.limbo.reducedDebugInfo),
+                pedestalEnabled = root.bool("limbo.pedestal.enabled", defaults.limbo.pedestalEnabled),
+                pedestalBlock = root.string("limbo.pedestal.block", defaults.limbo.pedestalBlock)
+            ),
+            player = PlayerConfig(
+                gameMode = root.string("player.game-mode", defaults.player.gameMode),
+                lockPosition = root.bool("player.lock-position", defaults.player.lockPosition),
+                lockRadiusBlocks = root.double("player.lock-radius-blocks", defaults.player.lockRadiusBlocks),
+                spawn = SpawnConfig(
+                    x = root.double("player.spawn.x", defaults.player.spawn.x),
+                    y = root.double("player.spawn.y", defaults.player.spawn.y),
+                    z = root.double("player.spawn.z", defaults.player.spawn.z)
+                ),
+                camera = CameraConfig(
+                    autoAim = root.bool("player.camera.auto-aim", defaults.player.camera.autoAim),
+                    yawDegrees = root.double("player.camera.yaw-degrees", defaults.player.camera.yawDegrees),
+                    pitchDegrees = root.double("player.camera.pitch-degrees", defaults.player.camera.pitchDegrees),
+                    yawOffsetDegrees = root.double("player.camera.yaw-offset-degrees", defaults.player.camera.yawOffsetDegrees),
+                    pitchOffsetDegrees = root.double("player.camera.pitch-offset-degrees", defaults.player.camera.pitchOffsetDegrees)
+                )
+            ),
+            scene = SceneConfig(
+                distanceBlocks = root.double("scene.distance-blocks", defaults.scene.distanceBlocks),
+                forwardYawDegrees = root.double("scene.forward-yaw-degrees", defaults.scene.forwardYawDegrees),
+                lateralOffsetBlocks = root.double("scene.lateral-offset-blocks", defaults.scene.lateralOffsetBlocks),
+                centerHeightBlocks = root.double("scene.center-height-blocks", defaults.scene.centerHeightBlocks),
+                rotationYawDegrees = root.double("scene.rotation.yaw-degrees", defaults.scene.rotationYawDegrees),
+                rotationPitchDegrees = root.double("scene.rotation.pitch-degrees", defaults.scene.rotationPitchDegrees),
+                rotationRollDegrees = root.double("scene.rotation.roll-degrees", defaults.scene.rotationRollDegrees)
+            ),
+            font = FontConfig(
+                preset = root.string("font.preset", defaults.font.preset),
+                alphabet = root.string("font.alphabet", defaults.font.alphabet),
+                customGlyphs = root.customGlyphs("font.custom-glyphs")
+            ),
+            geometry = GeometryConfig(
+                pixelWidth = root.int("geometry.pixel-width", defaults.geometry.pixelWidth),
+                pixelHeight = root.int("geometry.pixel-height", defaults.geometry.pixelHeight),
+                depthBlocks = root.int("geometry.depth-blocks", defaults.geometry.depthBlocks),
+                letterGapBlocks = root.int("geometry.letter-gap-blocks", defaults.geometry.letterGapBlocks),
+                centerText = root.bool("geometry.center-text", defaults.geometry.centerText)
+            ),
+            randomness = RandomnessConfig(
+                enabled = root.bool("randomness.enabled", defaults.randomness.enabled),
+                seedMode = root.string("randomness.seed-mode", defaults.randomness.seedMode),
+                fixedSeed = root.long("randomness.fixed-seed", defaults.randomness.fixedSeed),
+                character = CharacterRandomnessConfig(
+                    horizontalJitterBlocks = root.int(
+                        "randomness.character.horizontal-jitter-blocks",
+                        defaults.randomness.character.horizontalJitterBlocks
+                    ),
+                    verticalJitterBlocks = root.int(
+                        "randomness.character.vertical-jitter-blocks",
+                        defaults.randomness.character.verticalJitterBlocks
+                    ),
+                    depthJitterBlocks = root.int(
+                        "randomness.character.depth-jitter-blocks",
+                        defaults.randomness.character.depthJitterBlocks
+                    )
+                ),
+                scene = SceneRandomnessConfig(
+                    distanceJitterBlocks = root.double(
+                        "randomness.scene.distance-jitter-blocks",
+                        defaults.randomness.scene.distanceJitterBlocks
+                    ),
+                    heightJitterBlocks = root.double(
+                        "randomness.scene.height-jitter-blocks",
+                        defaults.randomness.scene.heightJitterBlocks
+                    ),
+                    forwardYawJitterDegrees = root.double(
+                        "randomness.scene.forward-yaw-jitter-degrees",
+                        defaults.randomness.scene.forwardYawJitterDegrees
+                    ),
+                    rotationYawJitterDegrees = root.double(
+                        "randomness.scene.rotation-yaw-jitter-degrees",
+                        defaults.randomness.scene.rotationYawJitterDegrees
+                    ),
+                    rotationPitchJitterDegrees = root.double(
+                        "randomness.scene.rotation-pitch-jitter-degrees",
+                        defaults.randomness.scene.rotationPitchJitterDegrees
+                    ),
+                    rotationRollJitterDegrees = root.double(
+                        "randomness.scene.rotation-roll-jitter-degrees",
+                        defaults.randomness.scene.rotationRollJitterDegrees
+                    )
+                )
+            ),
+            palette = PaletteConfig(
+                mode = root.string("palette.mode", defaults.palette.mode),
+                front = MaterialGroup(root.weightedMaterials("palette.front", defaults.palette.front.materials)),
+                side = MaterialGroup(root.weightedMaterials("palette.side", defaults.palette.side.materials)),
+                back = MaterialGroup(root.weightedMaterials("palette.back", defaults.palette.back.materials))
+            ),
+            noise = NoiseConfig(
+                enabled = root.bool("noise.enabled", defaults.noise.enabled),
+                count = root.int("noise.count", defaults.noise.count),
+                horizontalPaddingBlocks = root.int("noise.horizontal-padding-blocks", defaults.noise.horizontalPaddingBlocks),
+                verticalPaddingBlocks = root.int("noise.vertical-padding-blocks", defaults.noise.verticalPaddingBlocks),
+                depthMinBlocks = root.int("noise.depth-min-blocks", defaults.noise.depthMinBlocks),
+                depthMaxBlocks = root.int("noise.depth-max-blocks", defaults.noise.depthMaxBlocks),
+                materials = root.weightedMaterials("noise.materials", defaults.noise.materials)
+            ),
+            messages = MessageConfig(
+                prefix = root.string("messages.prefix", defaults.messages.prefix),
+                prompt = root.string("messages.prompt", defaults.messages.prompt),
+                wrong = root.string("messages.wrong", defaults.messages.wrong),
+                passed = root.string("messages.passed", defaults.messages.passed),
+                timeout = root.string("messages.timeout", defaults.messages.timeout),
+                tooManyAttempts = root.string("messages.too-many-attempts", defaults.messages.tooManyAttempts),
+                busy = root.string("messages.busy", defaults.messages.busy),
+                rateLimited = root.string("messages.rate-limited", defaults.messages.rateLimited),
+                unavailable = root.string("messages.unavailable", defaults.messages.unavailable),
+                targetMissing = root.string("messages.target-missing", defaults.messages.targetMissing)
+            )
         )
     }
 
-    private fun migrateAndFillDefaults(properties: Properties): Boolean {
-        var changed = false
-        val oldVersion = properties.int("config-version", 3)
-
-        // 0.3.0 no longer depends on fake block packets. The exact stock 0.2.6
-        // scene can therefore move back out to the requested large 30-block
-        // presentation without losing the far side when chunks arrive later.
-        if (oldVersion < CONFIG_VERSION) {
-            if (properties.getProperty("captcha-distance-blocks")?.trim() == "20.0") {
-                properties.setProperty("captcha-distance-blocks", "30.0")
-                changed = true
-            }
-            if (properties.getProperty("captcha-angle-degrees")?.trim() == "24.0") {
-                properties.setProperty("captcha-angle-degrees", "28.0")
-                changed = true
-            }
-            if (properties.getProperty("glyph-scale-x")?.trim() == "1") {
-                properties.setProperty("glyph-scale-x", "2")
-                changed = true
-            }
-        }
-
-        DEFAULT_PROPERTIES.forEach { (key, value) ->
-            if (!properties.containsKey(key)) {
-                properties.setProperty(key, value)
-                changed = true
-            }
-        }
-
-        if (properties.getProperty("config-version") != CONFIG_VERSION.toString()) {
-            properties.setProperty("config-version", CONFIG_VERSION.toString())
-            changed = true
-        }
-
-        return changed
+    private fun copyDefault(path: Path) {
+        val stream = CaptchaConfigLoader::class.java.getResourceAsStream("/config.yml")
+            ?: error("Bundled config.yml is missing from pnCaptcha jar")
+        stream.use { Files.copy(it, path, StandardCopyOption.REPLACE_EXISTING) }
     }
 
-    private fun writeDefaults(path: Path) {
-        val properties = Properties()
-        DEFAULT_PROPERTIES.forEach(properties::setProperty)
-        properties.setProperty("config-version", CONFIG_VERSION.toString())
-        store(path, properties)
-    }
-
-    private fun store(path: Path, properties: Properties) {
-        Files.newOutputStream(path).use { output ->
-            properties.store(output, "pnCaptcha configuration")
+    private fun Map<String, Any?>.value(path: String): Any? {
+        var current: Any? = this
+        for (part in path.split('.')) {
+            current = (current as? Map<*, *>)?.get(part) ?: return null
         }
+        return current
     }
 
-    private fun Properties.string(key: String, default: String): String =
-        getProperty(key, default).trim()
+    private fun Map<String, Any?>.string(path: String, default: String): String =
+        value(path)?.toString()?.trim()?.takeIf(String::isNotEmpty) ?: default
 
-    private fun Properties.int(key: String, default: Int): Int =
-        getProperty(key)?.trim()?.toIntOrNull() ?: default
-
-    private fun Properties.long(key: String, default: Long): Long =
-        getProperty(key)?.trim()?.toLongOrNull() ?: default
-
-    private fun Properties.double(key: String, default: Double): Double =
-        getProperty(key)?.trim()?.toDoubleOrNull() ?: default
-
-    private fun Properties.bool(key: String, default: Boolean): Boolean =
-        getProperty(key)?.trim()?.lowercase()?.let {
-            when (it) {
-                "true", "yes", "1", "on" -> true
-                "false", "no", "0", "off" -> false
-                else -> null
-            }
+    private fun Map<String, Any?>.int(path: String, default: Int): Int =
+        when (val value = value(path)) {
+            is Number -> value.toInt()
+            else -> value?.toString()?.trim()?.toIntOrNull()
         } ?: default
 
-    private val DEFAULT_PROPERTIES = linkedMapOf(
-        "target-server" to "lobby",
-        "captcha-length" to "5",
-        "max-attempts" to "3",
-        "timeout-seconds" to "30",
-        "verified-cache-minutes" to "720",
-        "noise-blocks" to "8",
-        "max-joins-per-window" to "6",
-        "join-window-seconds" to "10",
-        "max-active-captchas" to "128",
+    private fun Map<String, Any?>.long(path: String, default: Long): Long =
+        when (val value = value(path)) {
+            is Number -> value.toLong()
+            else -> value?.toString()?.trim()?.toLongOrNull()
+        } ?: default
 
-        "creative-mode" to "true",
-        "lock-player-position" to "false",
+    private fun Map<String, Any?>.double(path: String, default: Double): Double =
+        when (val value = value(path)) {
+            is Number -> value.toDouble()
+            else -> value?.toString()?.trim()?.toDoubleOrNull()
+        } ?: default
 
-        // Real Limbo chunk delivery settings used by the per-session world.
-        "limbo-view-distance" to "8",
-        "limbo-simulation-distance" to "6",
+    private fun Map<String, Any?>.bool(path: String, default: Boolean): Boolean =
+        when (val value = value(path)) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            else -> when (value?.toString()?.trim()?.lowercase()) {
+                "true", "yes", "on", "1" -> true
+                "false", "no", "off", "0" -> false
+                else -> default
+            }
+        }
 
-        // Placement/perspective.
-        "captcha-distance-blocks" to "30.0",
-        "captcha-angle-degrees" to "28.0",
-        "captcha-center-height-blocks" to "8.0",
-        "camera-pitch-offset-degrees" to "0.0",
+    private fun Map<String, Any?>.weightedMaterials(
+        path: String,
+        defaults: List<WeightedMaterial>
+    ): List<WeightedMaterial> {
+        val raw = value(path) as? List<*> ?: return defaults
+        val parsed = raw.mapNotNull { entry ->
+            when (entry) {
+                is String -> WeightedMaterial(entry.trim(), 1).takeIf { it.block.isNotEmpty() }
+                is Map<*, *> -> {
+                    val block = entry["block"]?.toString()?.trim().orEmpty()
+                    val weight = when (val weightValue = entry["weight"]) {
+                        is Number -> weightValue.toInt()
+                        else -> weightValue?.toString()?.toIntOrNull() ?: 1
+                    }
+                    if (block.isNotEmpty() && weight > 0) WeightedMaterial(block, weight) else null
+                }
+                else -> null
+            }
+        }
+        return parsed.ifEmpty { defaults }
+    }
 
-        // Mass and spacing.
-        "glyph-scale-x" to "2",
-        "glyph-scale-y" to "2",
-        "glyph-depth" to "3",
-        "glyph-gap-blocks" to "2",
-        "glyph-jitter-y-blocks" to "1",
-        "glyph-jitter-depth-blocks" to "1",
-        "glyph-materials" to DEFAULT_GLYPH_MATERIALS,
-        "glyph-side-materials" to DEFAULT_SIDE_MATERIALS,
-        "noise-material" to "minecraft:gray_stained_glass"
-    )
-
-    private const val DEFAULT_GLYPH_MATERIALS =
-        "minecraft:polished_deepslate,minecraft:deepslate_bricks,minecraft:gray_concrete,minecraft:cyan_terracotta,minecraft:light_blue_terracotta"
-
-    private const val DEFAULT_SIDE_MATERIALS =
-        "minecraft:deepslate_tiles,minecraft:deepslate_bricks,minecraft:blackstone,minecraft:polished_blackstone"
+    private fun Map<String, Any?>.customGlyphs(path: String): Map<Char, List<String>> {
+        val raw = value(path) as? Map<*, *> ?: return emptyMap()
+        return raw.mapNotNull { (key, value) ->
+            val char = key?.toString()?.singleOrNull() ?: return@mapNotNull null
+            val rows = (value as? List<*>)?.map { it.toString() } ?: return@mapNotNull null
+            char.uppercaseChar() to rows
+        }.toMap()
+    }
 }
