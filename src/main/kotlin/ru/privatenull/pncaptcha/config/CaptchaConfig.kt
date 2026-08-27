@@ -12,15 +12,20 @@ data class CaptchaConfig(
     val maxJoinsPerWindow: Int = 6,
     val joinWindow: Duration = Duration.ofSeconds(10),
     val glyphScale: Int = 2,
-    val glyphDepth: Int = 3,
+    val glyphDepth: Int = 5,
     val glyphMaterials: List<String> = listOf(
-        "minecraft:white_concrete",
-        "minecraft:light_gray_concrete",
-        "minecraft:cyan_concrete",
-        "minecraft:blue_concrete",
-        "minecraft:purple_concrete"
+        "minecraft:polished_deepslate",
+        "minecraft:deepslate_bricks",
+        "minecraft:gray_concrete",
+        "minecraft:cyan_terracotta",
+        "minecraft:light_blue_terracotta"
     ),
-    val glyphSideMaterial: String = "minecraft:deepslate_tiles",
+    val glyphSideMaterials: List<String> = listOf(
+        "minecraft:deepslate_tiles",
+        "minecraft:deepslate_bricks",
+        "minecraft:blackstone",
+        "minecraft:polished_blackstone"
+    ),
     val noiseMaterial: String = "minecraft:gray_stained_glass"
 ) {
     init {
@@ -33,8 +38,8 @@ data class CaptchaConfig(
         require(maxJoinsPerWindow in 1..100) { "maxJoinsPerWindow must be between 1 and 100" }
         require(!joinWindow.isNegative && !joinWindow.isZero) { "joinWindow must be positive" }
         require(glyphScale in 1..3) { "glyphScale must be between 1 and 3" }
-        require(glyphDepth in 1..5) { "glyphDepth must be between 1 and 5" }
+        require(glyphDepth in 1..8) { "glyphDepth must be between 1 and 8" }
         require(glyphMaterials.isNotEmpty()) { "glyphMaterials must not be empty" }
-        require(glyphSideMaterial.isNotBlank()) { "glyphSideMaterial must not be blank" }
+        require(glyphSideMaterials.isNotEmpty()) { "glyphSideMaterials must not be empty" }
     }
 }
