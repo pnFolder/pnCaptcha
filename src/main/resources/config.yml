@@ -1,0 +1,205 @@
+# ================================================================
+# pnCaptcha 0.4.0
+# One-file configuration. Restart Velocity after changing this file.
+# Any Minecraft block id can be used in material lists, including glass.
+# Weighted materials: bigger weight = chosen more often.
+# ================================================================
+
+general:
+  target-server: "lobby"
+  captcha-length: 5
+  max-attempts: 3
+  timeout-seconds: 30
+  verified-cache-minutes: 720
+
+security:
+  # Connections allowed from one IP inside join-window-seconds.
+  max-joins-per-window: 6
+  join-window-seconds: 10
+
+  # Each active CAPTCHA has its own tiny in-memory Limbo world.
+  max-active-captchas: 128
+
+limbo:
+  # Real Limbo view/simulation distance. Increase for very large/far scenes.
+  view-distance: 10
+  simulation-distance: 8
+  reduced-debug-info: false
+
+  # Exactly one real block under the player by default.
+  pedestal:
+    enabled: true
+    block: "minecraft:deepslate_tiles"
+
+player:
+  # creative | adventure | survival | spectator
+  game-mode: "creative"
+
+  # false is convenient while designing: fly around and inspect the CAPTCHA.
+  lock-position: false
+  lock-radius-blocks: 1.5
+
+  # Absolute Limbo spawn position.
+  spawn:
+    x: 0.5
+    y: 65.0
+    z: 0.5
+
+  camera:
+    # true = automatically look at the CAPTCHA centre.
+    auto-aim: true
+
+    # Used when auto-aim=false.
+    yaw-degrees: 0.0
+    pitch-degrees: 0.0
+
+    # Artistic correction added after automatic aiming.
+    yaw-offset-degrees: 0.0
+    pitch-offset-degrees: 0.0
+
+scene:
+  # Distance from player spawn to CAPTCHA centre.
+  distance-blocks: 30.0
+
+  # Direction in which the CAPTCHA centre is placed around the player.
+  # Minecraft-style: 0 = +Z, 90 = -X, -90 = +X, 180 = -Z.
+  forward-yaw-degrees: 0.0
+
+  # Move the whole object sideways relative to forward-yaw.
+  lateral-offset-blocks: 0.0
+
+  # CAPTCHA centre relative to player feet.
+  center-height-blocks: 8.0
+
+  # Rotation of the entire 3D text object.
+  # yaw gives the strong perspective/receding-side effect from the reference.
+  # pitch tilts the whole text up/down. roll rotates it clockwise/counter-clockwise.
+  rotation:
+    yaw-degrees: 28.0
+    pitch-degrees: 0.0
+    roll-degrees: 0.0
+
+font:
+  # classic-5x7 | custom
+  preset: "classic-5x7"
+
+  # Characters the generator may use. Avoiding 0/O and 1/I/L improves readability.
+  alphabet: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+  # Used only with preset: custom.
+  # Every glyph must use the same width and height. 1 = block, 0 = empty.
+  # Example:
+  # custom-glyphs:
+  #   A:
+  #     - "01110"
+  #     - "10001"
+  #     - "10001"
+  #     - "11111"
+  #     - "10001"
+  #     - "10001"
+  #     - "10001"
+  custom-glyphs: {}
+
+geometry:
+  # Size of ONE logical font pixel on the bright front face.
+  # Bigger numbers make letters fatter / taller.
+  pixel-width: 2
+  pixel-height: 2
+
+  # Actual physical 3D extrusion thickness. 3 = three blocks deep total.
+  depth-blocks: 3
+
+  # Empty space between characters.
+  letter-gap-blocks: 2
+
+  # Keep the entire generated line centred around the configured scene centre.
+  center-text: true
+
+randomness:
+  enabled: true
+
+  # random = fresh look each CAPTCHA; fixed = reproducible for screenshots/tests.
+  seed-mode: "random"
+  fixed-seed: 1337
+
+  character:
+    # Per-character position variations. Values are +/- maximum blocks.
+    horizontal-jitter-blocks: 0
+    vertical-jitter-blocks: 1
+    depth-jitter-blocks: 1
+
+  scene:
+    # Per-session scene variations, sampled from -value..+value.
+    distance-jitter-blocks: 0.0
+    height-jitter-blocks: 0.0
+    forward-yaw-jitter-degrees: 0.0
+    rotation-yaw-jitter-degrees: 2.0
+    rotation-pitch-jitter-degrees: 0.0
+    rotation-roll-jitter-degrees: 0.0
+
+palette:
+  # per-block = every voxel may differ
+  # per-character = each character chooses one front/side/back material
+  # solid = always use the first material in each list
+  mode: "per-block"
+
+  front:
+    - block: "minecraft:polished_deepslate"
+      weight: 4
+    - block: "minecraft:deepslate_bricks"
+      weight: 3
+    - block: "minecraft:gray_concrete"
+      weight: 2
+    - block: "minecraft:cyan_terracotta"
+      weight: 1
+    - block: "minecraft:light_blue_terracotta"
+      weight: 1
+
+  side:
+    - block: "minecraft:deepslate_tiles"
+      weight: 4
+    - block: "minecraft:deepslate_bricks"
+      weight: 3
+    - block: "minecraft:blackstone"
+      weight: 2
+    - block: "minecraft:polished_blackstone"
+      weight: 1
+
+  # Material of the deepest/back layer. Useful for a strong dark silhouette.
+  back:
+    - block: "minecraft:blackstone"
+      weight: 3
+    - block: "minecraft:deepslate_tiles"
+      weight: 2
+
+noise:
+  enabled: true
+  count: 8
+
+  # Area around the CAPTCHA where random blocks can appear.
+  horizontal-padding-blocks: 4
+  vertical-padding-blocks: 3
+
+  # Noise is placed BEHIND the glyph body, never in front of the readable face.
+  depth-min-blocks: 3
+  depth-max-blocks: 7
+
+  # Glass makes the interference partially transparent. Use any solid blocks
+  # instead if you want opaque noise.
+  materials:
+    - block: "minecraft:gray_stained_glass"
+      weight: 4
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 1
+
+messages:
+  prefix: "[pnCaptcha] "
+  prompt: "Type the 3D block code you see in chat."
+  wrong: "Wrong code. Try again ({attempt}/{max})."
+  passed: "Verification passed."
+  timeout: "CAPTCHA timed out."
+  too-many-attempts: "Too many wrong CAPTCHA attempts."
+  busy: "CAPTCHA service is busy. Try again shortly."
+  rate-limited: "Too many connection attempts. Try again in a few seconds."
+  unavailable: "CAPTCHA service is temporarily unavailable."
+  target-missing: "Target server is not configured correctly."
