@@ -98,7 +98,10 @@ class CaptchaManager(
             CaptchaLimboEnvironment.SPAWN_YAW,
             CaptchaLimboEnvironment.SPAWN_PITCH
         )
-        scheduleRender(playerId, sessionId, retriesLeft = 8, delayMillis = 150)
+
+        // onSpawn happens before every chunk is necessarily applied client-side.
+        // Waiting a little before the first overlay avoids racing Limbo's chunk data.
+        scheduleRender(playerId, sessionId, retriesLeft = 8, delayMillis = 350)
     }
 
     private fun scheduleRender(
@@ -126,6 +129,13 @@ class CaptchaManager(
                     }
                     if (becameWaiting) {
                         sendPrompt(current)
+
+                        // Limbo can still send/finish a chunk packet after our first
+                        // fake-block frame. A later chunk packet contains air and
+                        // overwrites client-only changes. Re-applying the same frame
+                        // twice makes the overlay stable without creating a world.
+                        scheduleStabilizingRender(playerId, sessionId, current.answer, 650)
+                        scheduleStabilizingRender(playerId, sessionId, current.answer, 1_400)
                     }
                 } else if (retriesLeft > 1) {
                     scheduleRender(playerId, sessionId, retriesLeft - 1, 150)
@@ -135,6 +145,32 @@ class CaptchaManager(
             } catch (throwable: Throwable) {
                 logger.error("Failed to render CAPTCHA for {}", proxyPlayer.username, throwable)
                 failInternal(current, "CAPTCHA rendering failed")
+            }
+        }, delayMillis, TimeUnit.MILLISECONDS)
+    }
+
+    private fun scheduleStabilizingRender(
+        playerId: UUID,
+        sessionId: UUID,
+        expectedAnswer: String,
+        delayMillis: Long
+    ) {
+        val session = sessions.getBySessionId(playerId, sessionId) ?: return
+        val limboPlayer = session.limboPlayer ?: return
+
+        limboPlayer.scheduledExecutor.schedule({
+            val current = sessions.getBySessionId(playerId, sessionId) ?: return@schedule
+            if (current.answer != expectedAnswer || current.state != VerificationState.CAPTCHA_WAITING) {
+                return@schedule
+            }
+
+            val proxyPlayer = current.limboPlayer?.proxyPlayer ?: return@schedule
+            try {
+                renderer.render(proxyPlayer, current.answer)
+            } catch (throwable: Throwable) {
+                // The first render already succeeded, so a late refresh failure is
+                // not fatal. Keep the session alive and let the normal timeout act.
+                logger.warn("Failed to refresh CAPTCHA overlay for {}", proxyPlayer.username, throwable)
             }
         }, delayMillis, TimeUnit.MILLISECONDS)
     }
@@ -184,7 +220,7 @@ class CaptchaManager(
                 NamedTextColor.RED
             )
         )
-        scheduleRender(playerId, sessionId, retriesLeft = 4, delayMillis = 0)
+        scheduleRender(playerId, sessionId, retriesLeft = 4, delayMillis = 150)
     }
 
     private fun complete(session: CaptchaSession, proxyPlayer: Player, limboPlayer: LimboPlayer) {
