@@ -3,6 +3,7 @@ package ru.privatenull.pncaptcha.update
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.Logger
+import org.yaml.snakeyaml.Yaml
 import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.message.MessageService
 import java.net.URI
@@ -53,9 +54,13 @@ class UpdateChecker(
                     return@thenAccept
                 }
 
-                val body = response.body()
-                val latest = TAG_REGEX.find(body)?.groupValues?.get(1)?.removePrefix("v")
-                val url = URL_REGEX.find(body)?.groupValues?.get(1)
+                val payload = runCatching {
+                    @Suppress("UNCHECKED_CAST")
+                    Yaml().load<Any?>(response.body()) as? Map<String, Any?>
+                }.getOrNull().orEmpty()
+
+                val latest = payload["tag_name"]?.toString()?.removePrefix("v")
+                val url = payload["html_url"]?.toString()
                 if (latest.isNullOrBlank() || url.isNullOrBlank()) {
                     state.set(UpdateState.Failed("Invalid GitHub response"))
                     if (config.updates.notifyConsole) logger.warn("pnCaptcha update check failed: invalid GitHub response")
@@ -90,11 +95,7 @@ class UpdateChecker(
         messages.send(
             player,
             config.messages.updateAvailable,
-            mapOf(
-                "current" to currentVersion,
-                "latest" to available.version,
-                "url" to available.url
-            )
+            mapOf("current" to currentVersion, "latest" to available.version, "url" to available.url)
         )
     }
 
@@ -121,10 +122,5 @@ class UpdateChecker(
         data class UpToDate(val version: String) : UpdateState
         data class Available(val version: String, val url: String) : UpdateState
         data class Failed(val reason: String) : UpdateState
-    }
-
-    companion object {
-        private val TAG_REGEX = Regex("\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"")
-        private val URL_REGEX = Regex("\\\"html_url\\\"\\s*:\\s*\\\"([^\\\"]+/releases/tag/[^\\\"]+)\\\"")
     }
 }
