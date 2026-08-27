@@ -24,19 +24,19 @@ jobs:
         run: gradle clean build --stacktrace
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.2.6.jar
-          jar tf build/libs/pnCaptcha-0.2.6.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.2.6.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-      - name: Publish v0.2.6
+          test -f build/libs/pnCaptcha-0.3.0.jar
+          jar tf build/libs/pnCaptcha-0.3.0.jar | grep -q 'velocity-plugin.json'
+          jar tf build/libs/pnCaptcha-0.3.0.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
+      - name: Publish v0.3.0
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.6 >/dev/null 2>&1; then
-            echo 'Release v0.2.6 already exists; skipping.'
+          if gh release view v0.3.0 >/dev/null 2>&1; then
+            echo 'Release v0.3.0 already exists; skipping.'
           else
-            gh release create v0.2.6 \
-              build/libs/pnCaptcha-0.2.6.jar \
+            gh release create v0.3.0 \
+              build/libs/pnCaptcha-0.3.0.jar \
               --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.2.6' \
-              --notes 'Visibility/inspection update: creative mode by default, optional position locking, safer 20-block/24-degree scene defaults that stay inside LimboAPI immediate spawn chunks, configurable distance/angle/height/fatness/depth/gap/jitter, and automatic migration of older stock configs.'
+              --title 'pnCaptcha 0.3.0' \
+              --notes 'Rendering architecture rewrite: PacketEvents is no longer required. Every verification session gets a tiny in-memory LimboAPI VirtualWorld containing the real 3D CAPTCHA blocks before spawn, eliminating unloaded-chunk BLOCK_CHANGE races. Includes configurable Limbo view/simulation distance, 30-block angled scene defaults, creative inspection mode, and an active-session memory cap.'
           fi
