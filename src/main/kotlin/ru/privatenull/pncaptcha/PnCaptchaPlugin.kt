@@ -18,7 +18,6 @@ import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.manager.CaptchaManager
-import ru.privatenull.pncaptcha.render.PacketCaptchaRenderer
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
 import java.nio.file.Path
@@ -26,14 +25,11 @@ import java.nio.file.Path
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.2.6",
-    description = "Configurable angled 3D packet CAPTCHA in a shared Velocity Limbo",
+    version = "0.3.0",
+    description = "Per-session LimboAPI 3D voxel CAPTCHA for Velocity",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
-    dependencies = [
-        Dependency(id = "limboapi"),
-        Dependency(id = "packetevents")
-    ]
+    dependencies = [Dependency(id = "limboapi")]
 )
 class PnCaptchaPlugin @Inject constructor(
     private val proxy: ProxyServer,
@@ -52,7 +48,6 @@ class PnCaptchaPlugin @Inject constructor(
         val sessionManager = CaptchaSessionManager()
         val verificationCache = VerificationCache(config.verifiedCacheTtl)
         val rateLimiter = IpJoinRateLimiter(config.maxJoinsPerWindow, config.joinWindow)
-        val renderer = PacketCaptchaRenderer(config)
 
         environment = limboEnvironment
         manager = CaptchaManager(
@@ -64,50 +59,39 @@ class PnCaptchaPlugin @Inject constructor(
             generator = CaptchaGenerator(),
             sessions = sessionManager,
             cache = verificationCache,
-            rateLimiter = rateLimiter,
-            renderer = renderer
+            rateLimiter = rateLimiter
         )
 
         logger.info(
             "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={})",
-            "0.2.6",
+            "0.3.0",
             proxy.version.version,
             config.targetServer,
             config.timeout.seconds,
             config.maxAttempts
         )
         logger.info(
-            "3D scene: distance={} blocks, angle={}°, height={}, face={}x{}, depth={}, gap={}, creative={}, lock-position={}",
+            "Renderer=Limbo VirtualWorld; PacketEvents is no longer required. " +
+                "distance={} blocks, angle={}°, face={}x{}, depth={}, view={}, simulation={}, creative={}",
             config.captchaDistanceBlocks,
             config.captchaAngleDegrees,
-            config.captchaCenterHeightBlocks,
             config.glyphScaleX,
             config.glyphScaleY,
             config.glyphDepth,
-            config.glyphGapBlocks,
-            config.creativeMode,
-            config.lockPlayerPosition
+            config.limboViewDistance,
+            config.limboSimulationDistance,
+            config.creativeMode
         )
 
         val bounds = CaptchaScene.chunkBounds(config)
         logger.info(
-            "CAPTCHA chunk bounds: X {}..{}, Z {}..{} (Limbo view-distance={})",
+            "Configured CAPTCHA volume spans chunks X {}..{}, Z {}..{}. " +
+                "These chunks are created before each session Limbo is prepared.",
             bounds.minX,
             bounds.maxX,
             bounds.minZ,
-            bounds.maxZ,
-            CaptchaScene.recommendedViewDistance(config)
+            bounds.maxZ
         )
-
-        // LimboAPI's default CHUNK_RADIUS_SEND_ON_SPAWN=2 means the spawn chunk
-        // plus directly adjacent chunks: relative chunk coordinates -1..1.
-        if (bounds.minX < -1 || bounds.maxX > 1 || bounds.minZ < -1 || bounds.maxZ > 1) {
-            logger.warn(
-                "Configured CAPTCHA reaches beyond chunks sent immediately by LimboAPI's default " +
-                    "chunk-radius-send-on-spawn=2. If parts are missing, increase it to 3 or reduce " +
-                    "captcha-distance/angle/size. The pnCaptcha 0.2.6 defaults stay inside -1..1."
-            )
-        }
     }
 
     @Subscribe
