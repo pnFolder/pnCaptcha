@@ -5,14 +5,21 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaFont
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
 import ru.privatenull.pncaptcha.captcha.CaptchaLayout
 import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfig
+import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
+import ru.privatenull.pncaptcha.config.FontConfig
+import ru.privatenull.pncaptcha.config.NoiseConfig
+import ru.privatenull.pncaptcha.config.RandomnessConfig
+import ru.privatenull.pncaptcha.config.SceneConfig
 import ru.privatenull.pncaptcha.session.CaptchaSession
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
+import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -24,85 +31,76 @@ import java.util.UUID
 class CoreServicesTest {
 
     @Test
-    fun `generator only emits supported unambiguous glyphs`() {
-        val generator = CaptchaGenerator()
+    fun `generator emits configured font alphabet`() {
+        val config = CaptchaConfig()
+        val font = CaptchaFont.resolve(config.font)
+        val generator = CaptchaGenerator(font.alphabet)
 
         repeat(100) {
             val code = generator.generate(5)
             assertEquals(5, code.length)
-            assertTrue(code.all(CaptchaFont::supports))
+            assertTrue(code.all { it in font.alphabet })
             assertFalse(code.any { it in "01ILO" })
         }
     }
 
     @Test
-    fun `font has fixed five by seven glyphs`() {
-        CaptchaGenerator.DEFAULT_ALPHABET.forEach { char ->
-            val pattern = CaptchaFont.pattern(char)
-            assertEquals(CaptchaFont.HEIGHT, pattern.size)
-            assertTrue(pattern.all { it.length == CaptchaFont.WIDTH })
-        }
+    fun `custom font can replace built in font`() {
+        val custom = FontConfig(
+            preset = "custom",
+            alphabet = "AB",
+            customGlyphs = mapOf(
+                'A' to listOf("010", "101", "111", "101", "101"),
+                'B' to listOf("110", "101", "110", "101", "110")
+            )
+        )
+        val resolved = CaptchaFont.resolve(custom)
+        assertEquals(3, resolved.width)
+        assertEquals(5, resolved.height)
+        assertEquals("AB", resolved.alphabet)
     }
 
     @Test
-    fun `angled layout physically recedes across z`() {
-        val layout = CaptchaLayout(random = Random(42))
+    fun `rotated layout has real depth pitch and roll`() {
         val config = CaptchaConfig(
-            noiseBlocks = 0,
-            captchaDistanceBlocks = 30.0,
-            captchaAngleDegrees = 28.0,
-            glyphScaleX = 2,
-            glyphScaleY = 2,
-            glyphDepth = 3,
-            glyphGapBlocks = 2,
-            glyphJitterYBlocks = 0,
-            glyphJitterDepthBlocks = 0,
-            glyphMaterials = listOf("minecraft:gray_concrete"),
-            glyphSideMaterials = listOf("minecraft:deepslate_tiles")
+            scene = SceneConfig(
+                distanceBlocks = 30.0,
+                rotationYawDegrees = 28.0,
+                rotationPitchDegrees = 8.0,
+                rotationRollDegrees = 5.0
+            ),
+            randomness = RandomnessConfig(enabled = false),
+            noise = NoiseConfig(enabled = false)
         )
-
-        val frame = layout.build("A2B3C", config)
-        val front = frame.filterValues { it == "minecraft:gray_concrete" }.keys
+        val random = Random(42)
+        val font = CaptchaFont.resolve(config.font)
+        val scene = CaptchaScene.resolve(config, random)
+        val frame = CaptchaLayout().build("A2B3C", config, font, scene, random)
 
         assertTrue(frame.isNotEmpty())
         assertEquals(frame.keys.size, frame.size)
-        assertTrue(front.map { it.z }.distinct().size > 8)
-        assertTrue(front.minOf { it.z } < 25)
-        assertTrue(front.maxOf { it.z } > 36)
+        assertTrue(frame.keys.map { it.x }.distinct().size > 10)
+        assertTrue(frame.keys.map { it.y }.distinct().size > 10)
+        assertTrue(frame.keys.map { it.z }.distinct().size > 10)
 
-        // The configured front centre is about 30 blocks away and the whole
-        // default scene remains within a practical Limbo view distance.
-        val bounds = CaptchaScene.chunkBounds(config)
-        assertTrue(bounds.minX >= -3)
-        assertTrue(bounds.maxX <= 3)
-        assertTrue(bounds.minZ >= 0)
-        assertTrue(bounds.maxZ <= 3)
+        val bounds = CaptchaScene.chunkBounds(config, scene, font)
+        assertTrue(bounds.maxZ >= bounds.minZ)
+        assertTrue(CaptchaScene.recommendedViewDistance(config, bounds) >= config.limbo.viewDistance)
     }
 
     @Test
-    fun `zero angle keeps the bright face on one z plane`() {
-        val layout = CaptchaLayout(random = Random(7))
-        val config = CaptchaConfig(
-            noiseBlocks = 0,
-            captchaAngleDegrees = 0.0,
-            glyphScaleX = 2,
-            glyphScaleY = 2,
-            glyphDepth = 3,
-            glyphJitterYBlocks = 0,
-            glyphJitterDepthBlocks = 0,
-            glyphMaterials = listOf("minecraft:gray_concrete"),
-            glyphSideMaterials = listOf("minecraft:deepslate_tiles")
-        )
-
-        val front = layout.build("AB3", config)
-            .filterValues { it == "minecraft:gray_concrete" }
-            .keys
-
-        assertEquals(1, front.map { it.z }.distinct().size)
+    fun `default yaml is copied and parsed`(@TempDir tempDir: Path) {
+        val config = CaptchaConfigLoader.load(tempDir)
+        assertTrue(tempDir.resolve("config.yml").toFile().isFile)
+        assertEquals(30.0, config.scene.distanceBlocks)
+        assertEquals(28.0, config.scene.rotationYawDegrees)
+        assertEquals(2, config.geometry.pixelWidth)
+        assertEquals(3, config.geometry.depthBlocks)
+        assertTrue(config.palette.front.materials.isNotEmpty())
     }
 
     @Test
-    fun `session manager replaces stale challenge for the same player`() {
+    fun `session manager replaces stale challenge for same player`() {
         val manager = CaptchaSessionManager()
         val playerId = UUID.randomUUID()
         val first = manager.create(CaptchaSession(playerId = playerId, answer = "AAAAA"))
@@ -128,9 +126,7 @@ class CoreServicesTest {
         assertFalse(cache.isVerified(uuid, "127.0.0.1"))
     }
 
-    private class MutableClock(
-        var now: Instant
-    ) : Clock() {
+    private class MutableClock(var now: Instant) : Clock() {
         override fun getZone(): ZoneId = ZoneOffset.UTC
         override fun withZone(zone: ZoneId): Clock = this
         override fun instant(): Instant = now
