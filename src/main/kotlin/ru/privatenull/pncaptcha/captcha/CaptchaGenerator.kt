@@ -7,8 +7,7 @@ class CaptchaGenerator(
     private val random: SecureRandom = SecureRandom()
 ) {
     init {
-        require(alphabet.isNotEmpty()) { "Captcha alphabet must not be empty" }
-        require(alphabet.all(CaptchaFont::supports)) { "Captcha font must support the entire alphabet" }
+        require(alphabet.isNotBlank()) { "Captcha alphabet must not be empty" }
     }
 
     fun generate(length: Int = DEFAULT_LENGTH): String {
