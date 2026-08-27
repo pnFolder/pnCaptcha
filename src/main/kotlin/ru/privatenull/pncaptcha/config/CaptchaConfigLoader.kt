@@ -7,7 +7,7 @@ import java.util.Properties
 
 object CaptchaConfigLoader {
     private const val FILE_NAME = "config.properties"
-    private const val CONFIG_VERSION = 5
+    private const val CONFIG_VERSION = 6
 
     fun load(dataDirectory: Path): CaptchaConfig {
         Files.createDirectories(dataDirectory)
@@ -41,16 +41,20 @@ object CaptchaConfigLoader {
             noiseBlocks = properties.int("noise-blocks", 8),
             maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
             joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
+            maxActiveCaptchas = properties.int("max-active-captchas", 128),
 
             creativeMode = properties.bool("creative-mode", true),
             lockPlayerPosition = properties.bool("lock-player-position", false),
 
-            captchaDistanceBlocks = properties.double("captcha-distance-blocks", 20.0),
-            captchaAngleDegrees = properties.double("captcha-angle-degrees", 24.0),
+            limboViewDistance = properties.int("limbo-view-distance", 8),
+            limboSimulationDistance = properties.int("limbo-simulation-distance", 6),
+
+            captchaDistanceBlocks = properties.double("captcha-distance-blocks", 30.0),
+            captchaAngleDegrees = properties.double("captcha-angle-degrees", 28.0),
             captchaCenterHeightBlocks = properties.double("captcha-center-height-blocks", 8.0),
             cameraPitchOffsetDegrees = properties.double("camera-pitch-offset-degrees", 0.0),
 
-            glyphScaleX = properties.int("glyph-scale-x", 1),
+            glyphScaleX = properties.int("glyph-scale-x", 2),
             glyphScaleY = properties.int("glyph-scale-y", 2),
             glyphDepth = properties.int("glyph-depth", 3),
             glyphGapBlocks = properties.int("glyph-gap-blocks", 2),
@@ -65,39 +69,24 @@ object CaptchaConfigLoader {
         )
     }
 
-    /**
-     * 0.2.5 introduced a 30-block / 28-degree / 2x2 default. It can push the
-     * far side of the rotated text outside LimboAPI's normal spawn+adjacent
-     * chunk set (CHUNK_RADIUS_SEND_ON_SPAWN=2). Version 5 migrates only those
-     * exact stock values to a safer 20-block / 24-degree / 1x2 layout. Custom
-     * values are preserved.
-     */
     private fun migrateAndFillDefaults(properties: Properties): Boolean {
         var changed = false
         val oldVersion = properties.int("config-version", 3)
 
-        if (oldVersion < 4) {
+        // 0.3.0 no longer depends on fake block packets. The exact stock 0.2.6
+        // scene can therefore move back out to the requested large 30-block
+        // presentation without losing the far side when chunks arrive later.
+        if (oldVersion < CONFIG_VERSION) {
+            if (properties.getProperty("captcha-distance-blocks")?.trim() == "20.0") {
+                properties.setProperty("captcha-distance-blocks", "30.0")
+                changed = true
+            }
+            if (properties.getProperty("captcha-angle-degrees")?.trim() == "24.0") {
+                properties.setProperty("captcha-angle-degrees", "28.0")
+                changed = true
+            }
             if (properties.getProperty("glyph-scale-x")?.trim() == "1") {
                 properties.setProperty("glyph-scale-x", "2")
-                changed = true
-            }
-            if (properties.getProperty("glyph-depth")?.trim() == "6") {
-                properties.setProperty("glyph-depth", "3")
-                changed = true
-            }
-        }
-
-        if (oldVersion < CONFIG_VERSION) {
-            if (properties.getProperty("captcha-distance-blocks")?.trim() == "30.0") {
-                properties.setProperty("captcha-distance-blocks", "20.0")
-                changed = true
-            }
-            if (properties.getProperty("captcha-angle-degrees")?.trim() == "28.0") {
-                properties.setProperty("captcha-angle-degrees", "24.0")
-                changed = true
-            }
-            if (properties.getProperty("glyph-scale-x")?.trim() == "2") {
-                properties.setProperty("glyph-scale-x", "1")
                 changed = true
             }
         }
@@ -160,19 +149,23 @@ object CaptchaConfigLoader {
         "noise-blocks" to "8",
         "max-joins-per-window" to "6",
         "join-window-seconds" to "10",
+        "max-active-captchas" to "128",
 
-        // Player inspection.
         "creative-mode" to "true",
         "lock-player-position" to "false",
 
+        // Real Limbo chunk delivery settings used by the per-session world.
+        "limbo-view-distance" to "8",
+        "limbo-simulation-distance" to "6",
+
         // Placement/perspective.
-        "captcha-distance-blocks" to "20.0",
-        "captcha-angle-degrees" to "24.0",
+        "captcha-distance-blocks" to "30.0",
+        "captcha-angle-degrees" to "28.0",
         "captcha-center-height-blocks" to "8.0",
         "camera-pitch-offset-degrees" to "0.0",
 
         // Mass and spacing.
-        "glyph-scale-x" to "1",
+        "glyph-scale-x" to "2",
         "glyph-scale-y" to "2",
         "glyph-depth" to "3",
         "glyph-gap-blocks" to "2",
