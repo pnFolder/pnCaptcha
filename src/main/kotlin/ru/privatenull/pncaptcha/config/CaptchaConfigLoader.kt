@@ -7,7 +7,7 @@ import java.util.Properties
 
 object CaptchaConfigLoader {
     private const val FILE_NAME = "config.properties"
-    private const val CONFIG_VERSION = 4
+    private const val CONFIG_VERSION = 5
 
     fun load(dataDirectory: Path): CaptchaConfig {
         Files.createDirectories(dataDirectory)
@@ -42,12 +42,15 @@ object CaptchaConfigLoader {
             maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
             joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
 
-            captchaDistanceBlocks = properties.double("captcha-distance-blocks", 30.0),
-            captchaAngleDegrees = properties.double("captcha-angle-degrees", 28.0),
+            creativeMode = properties.bool("creative-mode", true),
+            lockPlayerPosition = properties.bool("lock-player-position", false),
+
+            captchaDistanceBlocks = properties.double("captcha-distance-blocks", 20.0),
+            captchaAngleDegrees = properties.double("captcha-angle-degrees", 24.0),
             captchaCenterHeightBlocks = properties.double("captcha-center-height-blocks", 8.0),
             cameraPitchOffsetDegrees = properties.double("camera-pitch-offset-degrees", 0.0),
 
-            glyphScaleX = properties.int("glyph-scale-x", 2),
+            glyphScaleX = properties.int("glyph-scale-x", 1),
             glyphScaleY = properties.int("glyph-scale-y", 2),
             glyphDepth = properties.int("glyph-depth", 3),
             glyphGapBlocks = properties.int("glyph-gap-blocks", 2),
@@ -63,22 +66,38 @@ object CaptchaConfigLoader {
     }
 
     /**
-     * Adds newly introduced options to existing files so users can actually see
-     * and edit them. For the exact stock 0.2.3 visual defaults (1x2, depth 6),
-     * migrate to the new 0.2.4 look (2x2, depth 3). Custom older values are left
-     * untouched.
+     * 0.2.5 introduced a 30-block / 28-degree / 2x2 default. It can push the
+     * far side of the rotated text outside LimboAPI's normal spawn+adjacent
+     * chunk set (CHUNK_RADIUS_SEND_ON_SPAWN=2). Version 5 migrates only those
+     * exact stock values to a safer 20-block / 24-degree / 1x2 layout. Custom
+     * values are preserved.
      */
     private fun migrateAndFillDefaults(properties: Properties): Boolean {
         var changed = false
         val oldVersion = properties.int("config-version", 3)
 
-        if (oldVersion < CONFIG_VERSION) {
+        if (oldVersion < 4) {
             if (properties.getProperty("glyph-scale-x")?.trim() == "1") {
                 properties.setProperty("glyph-scale-x", "2")
                 changed = true
             }
             if (properties.getProperty("glyph-depth")?.trim() == "6") {
                 properties.setProperty("glyph-depth", "3")
+                changed = true
+            }
+        }
+
+        if (oldVersion < CONFIG_VERSION) {
+            if (properties.getProperty("captcha-distance-blocks")?.trim() == "30.0") {
+                properties.setProperty("captcha-distance-blocks", "20.0")
+                changed = true
+            }
+            if (properties.getProperty("captcha-angle-degrees")?.trim() == "28.0") {
+                properties.setProperty("captcha-angle-degrees", "24.0")
+                changed = true
+            }
+            if (properties.getProperty("glyph-scale-x")?.trim() == "2") {
+                properties.setProperty("glyph-scale-x", "1")
                 changed = true
             }
         }
@@ -123,6 +142,15 @@ object CaptchaConfigLoader {
     private fun Properties.double(key: String, default: Double): Double =
         getProperty(key)?.trim()?.toDoubleOrNull() ?: default
 
+    private fun Properties.bool(key: String, default: Boolean): Boolean =
+        getProperty(key)?.trim()?.lowercase()?.let {
+            when (it) {
+                "true", "yes", "1", "on" -> true
+                "false", "no", "0", "off" -> false
+                else -> null
+            }
+        } ?: default
+
     private val DEFAULT_PROPERTIES = linkedMapOf(
         "target-server" to "lobby",
         "captcha-length" to "5",
@@ -133,14 +161,18 @@ object CaptchaConfigLoader {
         "max-joins-per-window" to "6",
         "join-window-seconds" to "10",
 
+        // Player inspection.
+        "creative-mode" to "true",
+        "lock-player-position" to "false",
+
         // Placement/perspective.
-        "captcha-distance-blocks" to "30.0",
-        "captcha-angle-degrees" to "28.0",
+        "captcha-distance-blocks" to "20.0",
+        "captcha-angle-degrees" to "24.0",
         "captcha-center-height-blocks" to "8.0",
         "camera-pitch-offset-degrees" to "0.0",
 
         // Mass and spacing.
-        "glyph-scale-x" to "2",
+        "glyph-scale-x" to "1",
         "glyph-scale-y" to "2",
         "glyph-depth" to "3",
         "glyph-gap-blocks" to "2",
