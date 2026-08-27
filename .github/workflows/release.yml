@@ -24,19 +24,19 @@ jobs:
         run: gradle clean build --stacktrace
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.2.5.jar
-          jar tf build/libs/pnCaptcha-0.2.5.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.2.5.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-      - name: Publish v0.2.5
+          test -f build/libs/pnCaptcha-0.2.6.jar
+          jar tf build/libs/pnCaptcha-0.2.6.jar | grep -q 'velocity-plugin.json'
+          jar tf build/libs/pnCaptcha-0.2.6.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
+      - name: Publish v0.2.6
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.5 >/dev/null 2>&1; then
-            echo 'Release v0.2.5 already exists; skipping.'
+          if gh release view v0.2.6 >/dev/null 2>&1; then
+            echo 'Release v0.2.6 already exists; skipping.'
           else
-            gh release create v0.2.5 \
-              build/libs/pnCaptcha-0.2.5.jar \
+            gh release create v0.2.6 \
+              build/libs/pnCaptcha-0.2.6.jar \
               --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.2.5' \
-              --notes 'Angled 3D CAPTCHA scene with automatic config migration: physical X/Z plane rotation, 30-block default distance, configurable angle/height/fatness/depth/gap/jitter, automatic camera aiming, dynamic Limbo chunk preparation, batched fake-block rendering, and post-chunk refreshes.'
+              --title 'pnCaptcha 0.2.6' \
+              --notes 'Visibility/inspection update: creative mode by default, optional position locking, safer 20-block/24-degree scene defaults that stay inside LimboAPI immediate spawn chunks, configurable distance/angle/height/fatness/depth/gap/jitter, and automatic migration of older stock configs.'
           fi
