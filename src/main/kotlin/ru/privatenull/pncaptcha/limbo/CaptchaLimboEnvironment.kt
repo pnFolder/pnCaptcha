@@ -11,8 +11,8 @@ import ru.privatenull.pncaptcha.config.CaptchaConfig
 /**
  * One shared in-memory Limbo world for every CAPTCHA session.
  *
- * Only the floor and background wall exist in the virtual world. CAPTCHA glyphs
- * are sent as per-player PacketEvents block updates and are never written here.
+ * The real virtual world contains only one pedestal block under the player.
+ * CAPTCHA glyphs and decorative noise are client-only PacketEvents overlays.
  */
 class CaptchaLimboEnvironment(
     private val factory: LimboFactory,
@@ -30,23 +30,12 @@ class CaptchaLimboEnvironment(
             SPAWN_PITCH
         )
 
-        val floor = factory.createSimpleBlock("minecraft:deepslate_tiles")
-        val wall = factory.createSimpleBlock("minecraft:black_concrete")
+        val pedestal = factory.createSimpleBlock("minecraft:deepslate_tiles")
+        world.setBlock(0, 64, 0, pedestal)
 
-        for (x in -32..32) {
-            for (z in -4..15) {
-                world.setBlock(x, 64, z, floor)
-            }
-        }
-
-        for (x in -30..30) {
-            for (y in 65..77) {
-                world.setBlock(x, y, 14, wall)
-            }
-        }
-
-        // Ensure the chunks around the visual area exist even though the glyph plane itself is air.
-        for (chunkX in -2..2) {
+        // Prepare enough empty chunks for the widest supported 3D CAPTCHA.
+        // Nothing else is physically placed in the world.
+        for (chunkX in -4..4) {
             for (chunkZ in -1..1) {
                 world.getChunkOrNew(chunkX, chunkZ)
             }
@@ -59,7 +48,7 @@ class CaptchaLimboEnvironment(
             .setName("pnCaptcha")
             .setGameMode(GameMode.ADVENTURE)
             .setReadTimeout(config.timeout.toMillis().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() + 5_000)
-            .setViewDistance(3)
+            .setViewDistance(4)
             .setSimulationDistance(2)
             .setReducedDebugInfo(true)
             .setShouldRespawn(true)
@@ -79,6 +68,6 @@ class CaptchaLimboEnvironment(
         const val SPAWN_Y: Double = 65.0
         const val SPAWN_Z: Double = 0.5
         const val SPAWN_YAW: Float = 0.0f
-        const val SPAWN_PITCH: Float = -10.0f
+        const val SPAWN_PITCH: Float = -27.0f
     }
 }
