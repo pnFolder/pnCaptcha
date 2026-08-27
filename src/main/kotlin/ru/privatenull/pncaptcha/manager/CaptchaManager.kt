@@ -4,7 +4,6 @@ import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
-import net.elytrium.limboapi.api.player.GameMode
 import net.elytrium.limboapi.api.player.LimboPlayer
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
@@ -89,12 +88,10 @@ class CaptchaManager(
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
         session.limboPlayer = limboPlayer
         limboPlayer.disableFalling()
-        limboPlayer.setGameMode(GameMode.ADVENTURE)
+        limboPlayer.setGameMode(environment.gameMode)
         limboPlayer.sendAbilities()
         teleportToCamera(limboPlayer)
 
-        // Give Limbo's initial chunks time to reach the client before overlaying
-        // the fake voxel sculpture.
         scheduleRender(playerId, sessionId, retriesLeft = 8, delayMillis = 350)
     }
 
@@ -123,10 +120,6 @@ class CaptchaManager(
                     }
                     if (becameWaiting) {
                         sendPrompt(current)
-
-                        // A chunk arriving after the first fake-block frame can
-                        // overwrite it with air. Re-apply at several points; this
-                        // also makes configurable ~30 block scenes robust.
                         scheduleStabilizingRender(playerId, sessionId, current.answer, 650)
                         scheduleStabilizingRender(playerId, sessionId, current.answer, 1_400)
                         scheduleStabilizingRender(playerId, sessionId, current.answer, 2_600)
@@ -236,6 +229,8 @@ class CaptchaManager(
     }
 
     fun enforcePosition(playerId: UUID, sessionId: UUID, x: Double, y: Double, z: Double) {
+        if (!config.lockPlayerPosition) return
+
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
         val dx = x - environment.spawnX
         val dy = y - environment.spawnY
