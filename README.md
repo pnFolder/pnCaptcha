@@ -37,10 +37,10 @@ shared LimboAPI world
 
 - Java 21+
 - Velocity 3.5.x
-- LimboAPI 1.1.26 (or a newer build compatible with your exact Velocity build)
+- LimboAPI 1.1.26+ (use a current build that supports your Minecraft protocol)
 - PacketEvents 2.13.0+
 
-The project uses only public LimboAPI and PacketEvents APIs; it does not reflect into Velocity internals.
+The project uses public LimboAPI and PacketEvents APIs and does not create a Paper CAPTCHA backend.
 
 ## Configuration
 
@@ -61,13 +61,13 @@ noise-material=minecraft:gray_stained_glass
 
 The generated code excludes ambiguous `0/O/1/I/L` characters. Glyphs use a built-in 5x7 font, per-character vertical jitter, randomized materials, and non-overlapping visual noise.
 
-## Current verification flow
+## Verification flow
 
 1. LimboAPI fires `LoginLimboRegisterEvent`.
 2. pnCaptcha skips a challenge only when the same UUID **and** IP are still in the verification cache.
 3. A small per-IP join-window limiter rejects obvious reconnect floods before CAPTCHA rendering.
 4. The player is spawned into the single shared Limbo instance.
-5. After the Limbo chunks are ready, PacketEvents sends fake block updates for that player's code.
+5. PacketEvents sends fake block updates for that player's code only to that client.
 6. Limbo's session handler consumes chat input directly, so the answer never needs a Paper server.
 7. Wrong answer: increment attempt counter and redraw the overlay in place.
 8. Correct answer: cache the UUID+IP pair and hand the player to the configured backend.
@@ -79,6 +79,6 @@ The generated code excludes ambiguous `0/O/1/I/L` characters. Glyphs use a built
 gradle clean build
 ```
 
-The shaded plugin is written to `build/libs/pnCaptcha-0.2.0-SNAPSHOT.jar`.
+The shaded plugin is written to `build/libs/pnCaptcha-0.2.0.jar`.
 
 GitHub Actions builds and tests every push and pull request.
