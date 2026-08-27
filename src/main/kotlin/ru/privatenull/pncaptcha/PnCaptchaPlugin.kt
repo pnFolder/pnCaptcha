@@ -20,6 +20,7 @@ import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.manager.CaptchaManager
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
+import java.nio.file.Files
 import java.nio.file.Path
 
 @Plugin(
@@ -43,6 +44,11 @@ class PnCaptchaPlugin @Inject constructor(
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
         val config = CaptchaConfigLoader.load(dataDirectory)
+        val legacyConfig = dataDirectory.resolve("config.properties")
+        if (Files.deleteIfExists(legacyConfig)) {
+            logger.info("Removed legacy config.properties; pnCaptcha now uses only config.yml")
+        }
+
         val font = CaptchaFont.resolve(config.font)
         val factory = resolveLimboFactory()
         val limboEnvironment = CaptchaLimboEnvironment(factory, config)
