@@ -91,16 +91,10 @@ class CaptchaManager(
         limboPlayer.disableFalling()
         limboPlayer.setGameMode(GameMode.ADVENTURE)
         limboPlayer.sendAbilities()
-        limboPlayer.teleport(
-            CaptchaLimboEnvironment.SPAWN_X,
-            CaptchaLimboEnvironment.SPAWN_Y,
-            CaptchaLimboEnvironment.SPAWN_Z,
-            CaptchaLimboEnvironment.SPAWN_YAW,
-            CaptchaLimboEnvironment.SPAWN_PITCH
-        )
+        teleportToCamera(limboPlayer)
 
-        // onSpawn happens before every chunk is necessarily applied client-side.
-        // Waiting a little before the first overlay avoids racing Limbo's chunk data.
+        // Give Limbo's initial chunks time to reach the client before overlaying
+        // the fake voxel sculpture.
         scheduleRender(playerId, sessionId, retriesLeft = 8, delayMillis = 350)
     }
 
@@ -130,12 +124,12 @@ class CaptchaManager(
                     if (becameWaiting) {
                         sendPrompt(current)
 
-                        // Limbo can still send/finish a chunk packet after our first
-                        // fake-block frame. A later chunk packet contains air and
-                        // overwrites client-only changes. Re-applying the same frame
-                        // twice makes the overlay stable without creating a world.
+                        // A chunk arriving after the first fake-block frame can
+                        // overwrite it with air. Re-apply at several points; this
+                        // also makes configurable ~30 block scenes robust.
                         scheduleStabilizingRender(playerId, sessionId, current.answer, 650)
                         scheduleStabilizingRender(playerId, sessionId, current.answer, 1_400)
+                        scheduleStabilizingRender(playerId, sessionId, current.answer, 2_600)
                     }
                 } else if (retriesLeft > 1) {
                     scheduleRender(playerId, sessionId, retriesLeft - 1, 150)
@@ -168,8 +162,6 @@ class CaptchaManager(
             try {
                 renderer.render(proxyPlayer, current.answer)
             } catch (throwable: Throwable) {
-                // The first render already succeeded, so a late refresh failure is
-                // not fatal. Keep the session alive and let the normal timeout act.
                 logger.warn("Failed to refresh CAPTCHA overlay for {}", proxyPlayer.username, throwable)
             }
         }, delayMillis, TimeUnit.MILLISECONDS)
@@ -245,18 +237,12 @@ class CaptchaManager(
 
     fun enforcePosition(playerId: UUID, sessionId: UUID, x: Double, y: Double, z: Double) {
         val session = sessions.getBySessionId(playerId, sessionId) ?: return
-        val dx = x - CaptchaLimboEnvironment.SPAWN_X
-        val dy = y - CaptchaLimboEnvironment.SPAWN_Y
-        val dz = z - CaptchaLimboEnvironment.SPAWN_Z
+        val dx = x - environment.spawnX
+        val dy = y - environment.spawnY
+        val dz = z - environment.spawnZ
 
         if (dx * dx + dy * dy + dz * dz > MAX_MOVE_DISTANCE_SQUARED) {
-            session.limboPlayer?.teleport(
-                CaptchaLimboEnvironment.SPAWN_X,
-                CaptchaLimboEnvironment.SPAWN_Y,
-                CaptchaLimboEnvironment.SPAWN_Z,
-                CaptchaLimboEnvironment.SPAWN_YAW,
-                CaptchaLimboEnvironment.SPAWN_PITCH
-            )
+            session.limboPlayer?.let(::teleportToCamera)
         }
     }
 
@@ -304,6 +290,16 @@ class CaptchaManager(
         timeoutTasks.remove(session.playerId)?.cancel()
         session.limboPlayer?.proxyPlayer?.let(renderer::clear)
         session.limboPlayer = null
+    }
+
+    private fun teleportToCamera(limboPlayer: LimboPlayer) {
+        limboPlayer.teleport(
+            environment.spawnX,
+            environment.spawnY,
+            environment.spawnZ,
+            environment.spawnYaw,
+            environment.spawnPitch
+        )
     }
 
     private fun sendPrompt(session: CaptchaSession) {
