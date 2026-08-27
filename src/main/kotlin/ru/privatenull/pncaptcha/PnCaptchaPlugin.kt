@@ -14,6 +14,7 @@ import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import org.slf4j.Logger
 import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
+import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.manager.CaptchaManager
@@ -21,12 +22,13 @@ import ru.privatenull.pncaptcha.render.PacketCaptchaRenderer
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
 import java.nio.file.Path
+import kotlin.math.abs
 
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.2.3",
-    description = "Chunk-safe perspective 3D packet CAPTCHA in a shared Velocity Limbo",
+    version = "0.2.4",
+    description = "Configurable angled 3D packet CAPTCHA in a shared Velocity Limbo",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
     dependencies = [
@@ -68,17 +70,42 @@ class PnCaptchaPlugin @Inject constructor(
         )
 
         logger.info(
-            "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={}, scale={}x{}, depth={})",
-            "0.2.3",
+            "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={})",
+            "0.2.4",
             proxy.version.version,
             config.targetServer,
             config.timeout.seconds,
-            config.maxAttempts,
+            config.maxAttempts
+        )
+        logger.info(
+            "3D scene: distance={} blocks, angle={}°, height={} blocks, fatness={}x{}, depth={}, gap={}",
+            config.captchaDistanceBlocks,
+            config.captchaAngleDegrees,
+            config.captchaCenterHeightBlocks,
             config.glyphScaleX,
             config.glyphScaleY,
-            config.glyphDepth
+            config.glyphDepth,
+            config.glyphGapBlocks
         )
-        logger.info("CAPTCHA overlay is chunk-safe, batched by chunk section, and refreshed after Limbo chunk delivery.")
+
+        val bounds = CaptchaScene.chunkBounds(config)
+        logger.info(
+            "CAPTCHA chunk bounds: X {}..{}, Z {}..{} (Limbo view-distance={})",
+            bounds.minX,
+            bounds.maxX,
+            bounds.minZ,
+            bounds.maxZ,
+            CaptchaScene.recommendedViewDistance(config)
+        )
+        if (
+            abs(bounds.minX) > 2 || abs(bounds.maxX) > 2 ||
+            abs(bounds.minZ) > 2 || abs(bounds.maxZ) > 2
+        ) {
+            logger.warn(
+                "Configured CAPTCHA reaches beyond the usual LimboAPI spawn chunk radius of 2. " +
+                    "If outer glyphs do not appear, increase LimboAPI main.chunk-radius-send-on-spawn."
+            )
+        }
     }
 
     @Subscribe
