@@ -11,22 +11,26 @@ data class CaptchaConfig(
     val noiseBlocks: Int = 8,
     val maxJoinsPerWindow: Int = 6,
     val joinWindow: Duration = Duration.ofSeconds(10),
+    val maxActiveCaptchas: Int = 128,
 
-    // Player inspection controls. Creative is useful while tuning the scene;
-    // fake CAPTCHA blocks still cannot modify the shared Limbo world.
+    // Player inspection controls.
     val creativeMode: Boolean = true,
     val lockPlayerPosition: Boolean = false,
 
-    // Scene placement. Defaults stay completely inside LimboAPI's normal
-    // spawn+adjacent chunk set while still looking large from the player.
-    val captchaDistanceBlocks: Double = 20.0,
-    val captchaAngleDegrees: Double = 24.0,
+    // Limbo chunk delivery controls. These are now meaningful because the
+    // CAPTCHA is stored in the VirtualWorld itself instead of fake packets.
+    val limboViewDistance: Int = 8,
+    val limboSimulationDistance: Int = 6,
+
+    // Scene placement.
+    val captchaDistanceBlocks: Double = 30.0,
+    val captchaAngleDegrees: Double = 28.0,
     val captchaCenterHeightBlocks: Double = 8.0,
     val cameraPitchOffsetDegrees: Double = 0.0,
 
-    // Glyph mass/spacing. Depth is the actual 3D thickness; scale X/Y controls
+    // Glyph mass/spacing. Depth is the real 3D thickness; scale X/Y controls
     // how fat one logical font pixel becomes on the front face.
-    val glyphScaleX: Int = 1,
+    val glyphScaleX: Int = 2,
     val glyphScaleY: Int = 2,
     val glyphDepth: Int = 3,
     val glyphGapBlocks: Int = 2,
@@ -57,9 +61,16 @@ data class CaptchaConfig(
         require(noiseBlocks in 0..128) { "noiseBlocks must be between 0 and 128" }
         require(maxJoinsPerWindow in 1..100) { "maxJoinsPerWindow must be between 1 and 100" }
         require(!joinWindow.isNegative && !joinWindow.isZero) { "joinWindow must be positive" }
+        require(maxActiveCaptchas in 1..10_000) { "maxActiveCaptchas must be between 1 and 10000" }
 
-        require(captchaDistanceBlocks in 8.0..48.0) {
-            "captchaDistanceBlocks must be between 8 and 48"
+        require(limboViewDistance in 2..16) { "limboViewDistance must be between 2 and 16" }
+        require(limboSimulationDistance in 2..16) { "limboSimulationDistance must be between 2 and 16" }
+        require(limboSimulationDistance <= limboViewDistance) {
+            "limboSimulationDistance must not exceed limboViewDistance"
+        }
+
+        require(captchaDistanceBlocks in 8.0..64.0) {
+            "captchaDistanceBlocks must be between 8 and 64"
         }
         require(captchaAngleDegrees in -45.0..45.0) {
             "captchaAngleDegrees must be between -45 and 45"
