@@ -2,6 +2,8 @@
 
 `pnCaptcha` is a Velocity CAPTCHA gate that keeps unverified connections away from real backend servers.
 
+Current test release: **0.2.0**.
+
 ## Architecture
 
 The plugin deliberately splits transport and rendering:
