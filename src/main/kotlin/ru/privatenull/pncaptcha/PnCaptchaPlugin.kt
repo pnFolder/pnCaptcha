@@ -22,12 +22,11 @@ import ru.privatenull.pncaptcha.render.PacketCaptchaRenderer
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
 import java.nio.file.Path
-import kotlin.math.abs
 
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.2.5",
+    version = "0.2.6",
     description = "Configurable angled 3D packet CAPTCHA in a shared Velocity Limbo",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
@@ -71,21 +70,23 @@ class PnCaptchaPlugin @Inject constructor(
 
         logger.info(
             "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={})",
-            "0.2.5",
+            "0.2.6",
             proxy.version.version,
             config.targetServer,
             config.timeout.seconds,
             config.maxAttempts
         )
         logger.info(
-            "3D scene: distance={} blocks, angle={}°, height={} blocks, fatness={}x{}, depth={}, gap={}",
+            "3D scene: distance={} blocks, angle={}°, height={}, face={}x{}, depth={}, gap={}, creative={}, lock-position={}",
             config.captchaDistanceBlocks,
             config.captchaAngleDegrees,
             config.captchaCenterHeightBlocks,
             config.glyphScaleX,
             config.glyphScaleY,
             config.glyphDepth,
-            config.glyphGapBlocks
+            config.glyphGapBlocks,
+            config.creativeMode,
+            config.lockPlayerPosition
         )
 
         val bounds = CaptchaScene.chunkBounds(config)
@@ -97,13 +98,14 @@ class PnCaptchaPlugin @Inject constructor(
             bounds.maxZ,
             CaptchaScene.recommendedViewDistance(config)
         )
-        if (
-            abs(bounds.minX) > 2 || abs(bounds.maxX) > 2 ||
-            abs(bounds.minZ) > 2 || abs(bounds.maxZ) > 2
-        ) {
+
+        // LimboAPI's default CHUNK_RADIUS_SEND_ON_SPAWN=2 means the spawn chunk
+        // plus directly adjacent chunks: relative chunk coordinates -1..1.
+        if (bounds.minX < -1 || bounds.maxX > 1 || bounds.minZ < -1 || bounds.maxZ > 1) {
             logger.warn(
-                "Configured CAPTCHA reaches beyond the usual LimboAPI spawn chunk radius of 2. " +
-                    "If outer glyphs do not appear, increase LimboAPI main.chunk-radius-send-on-spawn."
+                "Configured CAPTCHA reaches beyond chunks sent immediately by LimboAPI's default " +
+                    "chunk-radius-send-on-spawn=2. If parts are missing, increase it to 3 or reduce " +
+                    "captcha-distance/angle/size. The pnCaptcha 0.2.6 defaults stay inside -1..1."
             )
         }
     }
