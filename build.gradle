@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '0.3.0'
+version = '0.4.0'
 
 repositories {
     mavenCentral()
@@ -17,7 +17,9 @@ dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     kapt 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
     compileOnly 'net.elytrium.limboapi:api:1.1.26'
+
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
+    implementation 'org.yaml:snakeyaml:2.3'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testImplementation 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
