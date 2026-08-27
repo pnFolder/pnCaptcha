@@ -32,8 +32,11 @@ class PacketCaptchaRenderer(
         val next = layout.build(
             answer = answer,
             glyphMaterials = config.glyphMaterials,
+            sideMaterial = config.glyphSideMaterial,
             noiseMaterial = config.noiseMaterial,
-            noiseCount = config.noiseBlocks
+            noiseCount = config.noiseBlocks,
+            scale = config.glyphScale,
+            depth = config.glyphDepth
         )
 
         val air = WrappedBlockState.getByString(clientVersion, "minecraft:air")
