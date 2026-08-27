@@ -62,7 +62,7 @@ class CaptchaLimboEnvironment(
 
         limbo = factory.createLimbo(world)
             .setName("pnCaptcha")
-            .setGameMode(GameMode.ADVENTURE)
+            .setGameMode(GameMode.CREATIVE)
             .setReadTimeout(config.timeout.toMillis().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() + 5_000)
             .setViewDistance(CaptchaScene.recommendedViewDistance(config))
             .setSimulationDistance(2)
