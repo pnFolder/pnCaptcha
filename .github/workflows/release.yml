@@ -24,19 +24,19 @@ jobs:
         run: gradle clean build --stacktrace
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.2.0.jar
-          jar tf build/libs/pnCaptcha-0.2.0.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.2.0.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-      - name: Publish v0.2.0
+          test -f build/libs/pnCaptcha-0.2.1.jar
+          jar tf build/libs/pnCaptcha-0.2.1.jar | grep -q 'velocity-plugin.json'
+          jar tf build/libs/pnCaptcha-0.2.1.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
+      - name: Publish v0.2.1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.0 >/dev/null 2>&1; then
-            echo 'Release v0.2.0 already exists; skipping.'
+          if gh release view v0.2.1 >/dev/null 2>&1; then
+            echo 'Release v0.2.1 already exists; skipping.'
           else
-            gh release create v0.2.0 \
-              build/libs/pnCaptcha-0.2.0.jar \
+            gh release create v0.2.1 \
+              build/libs/pnCaptcha-0.2.1.jar \
               --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.2.0' \
-              --notes 'First testable packet-rendered CAPTCHA build for Velocity 3.5.x. Requires LimboAPI 1.1.26+ and PacketEvents 2.13.0+. CAPTCHA glyphs are client-only fake block updates inside one shared Limbo world.'
+              --title 'pnCaptcha 0.2.1' \
+              --notes '3D voxel CAPTCHA update: one pedestal block only, 2x readable glyph cells, configurable 3-block extrusion, shifted dark side layers, and background-only noise. Requires LimboAPI compatibility mode when PacketEvents is installed.'
           fi
