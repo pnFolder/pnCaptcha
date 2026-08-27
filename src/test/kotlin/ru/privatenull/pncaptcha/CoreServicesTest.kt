@@ -9,6 +9,8 @@ import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaFont
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
 import ru.privatenull.pncaptcha.captcha.CaptchaLayout
+import ru.privatenull.pncaptcha.captcha.CaptchaScene
+import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.session.CaptchaSession
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
 import java.time.Clock
@@ -43,29 +45,60 @@ class CoreServicesTest {
     }
 
     @Test
-    fun `layout creates chunk safe deep volumetric frame`() {
+    fun `angled layout physically recedes across z`() {
         val layout = CaptchaLayout(random = Random(42))
-        val frame = layout.build(
-            answer = "A2B3C",
+        val config = CaptchaConfig(
+            noiseBlocks = 0,
+            captchaDistanceBlocks = 30.0,
+            captchaAngleDegrees = 28.0,
+            glyphScaleX = 2,
+            glyphScaleY = 2,
+            glyphDepth = 3,
+            glyphGapBlocks = 2,
+            glyphJitterYBlocks = 0,
+            glyphJitterDepthBlocks = 0,
             glyphMaterials = listOf("minecraft:gray_concrete"),
-            sideMaterials = listOf("minecraft:deepslate_tiles", "minecraft:blackstone"),
-            noiseMaterial = "minecraft:gray_stained_glass",
-            noiseCount = 0,
-            scaleX = 1,
-            scaleY = 2,
-            depth = 6
+            glyphSideMaterials = listOf("minecraft:deepslate_tiles")
         )
+
+        val frame = layout.build("A2B3C", config)
+        val front = frame.filterValues { it == "minecraft:gray_concrete" }.keys
 
         assertTrue(frame.isNotEmpty())
         assertEquals(frame.keys.size, frame.size)
-        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z })
-        assertTrue(frame.keys.any { it.z == CaptchaLayout.DEFAULT_FRONT_Z + 5 })
+        assertTrue(front.map { it.z }.distinct().size > 8)
+        assertTrue(front.minOf { it.z } < 25)
+        assertTrue(front.maxOf { it.z } > 36)
 
-        // With the default five-character CAPTCHA the face is only 29 blocks
-        // wide and all volume stays in X chunks -1/0 and Z chunks 0/1.
-        // Those are available immediately around the default spawn chunk.
-        assertTrue(frame.keys.all { it.x in -15..15 })
-        assertTrue(frame.keys.all { it.z in 14..19 })
+        // The configured front centre is about 30 blocks away and the whole
+        // default scene remains within a practical Limbo view distance.
+        val bounds = CaptchaScene.chunkBounds(config)
+        assertTrue(bounds.minX >= -3)
+        assertTrue(bounds.maxX <= 3)
+        assertTrue(bounds.minZ >= 0)
+        assertTrue(bounds.maxZ <= 3)
+    }
+
+    @Test
+    fun `zero angle keeps the bright face on one z plane`() {
+        val layout = CaptchaLayout(random = Random(7))
+        val config = CaptchaConfig(
+            noiseBlocks = 0,
+            captchaAngleDegrees = 0.0,
+            glyphScaleX = 2,
+            glyphScaleY = 2,
+            glyphDepth = 3,
+            glyphJitterYBlocks = 0,
+            glyphJitterDepthBlocks = 0,
+            glyphMaterials = listOf("minecraft:gray_concrete"),
+            glyphSideMaterials = listOf("minecraft:deepslate_tiles")
+        )
+
+        val front = layout.build("AB3", config)
+            .filterValues { it == "minecraft:gray_concrete" }
+            .keys
+
+        assertEquals(1, front.map { it.z }.distinct().size)
     }
 
     @Test
