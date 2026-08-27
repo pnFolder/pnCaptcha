@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '0.4.0'
+version = '0.5.0'
 
 repositories {
     mavenCentral()
@@ -20,6 +20,9 @@ dependencies {
 
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
     implementation 'org.yaml:snakeyaml:2.3'
+    implementation('net.kyori:adventure-text-minimessage:4.17.0') {
+        exclude group: 'net.kyori', module: 'adventure-api'
+    }
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testImplementation 'com.velocitypowered:velocity-api:3.5.0-SNAPSHOT'
