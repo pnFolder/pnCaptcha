@@ -25,13 +25,16 @@ object CaptchaConfigLoader {
             maxAttempts = properties.int("max-attempts", 3),
             timeout = Duration.ofSeconds(properties.long("timeout-seconds", 30)),
             verifiedCacheTtl = Duration.ofMinutes(properties.long("verified-cache-minutes", 720)),
-            noiseBlocks = properties.int("noise-blocks", 22),
+            noiseBlocks = properties.int("noise-blocks", 12),
             maxJoinsPerWindow = properties.int("max-joins-per-window", 6),
             joinWindow = Duration.ofSeconds(properties.long("join-window-seconds", 10)),
+            glyphScale = properties.int("glyph-scale", 2),
+            glyphDepth = properties.int("glyph-depth", 3),
             glyphMaterials = properties.string("glyph-materials", DEFAULT_GLYPH_MATERIALS)
                 .split(',')
                 .map(String::trim)
                 .filter(String::isNotEmpty),
+            glyphSideMaterial = properties.string("glyph-side-material", "minecraft:deepslate_tiles"),
             noiseMaterial = properties.string("noise-material", "minecraft:gray_stained_glass")
         )
     }
@@ -43,10 +46,13 @@ object CaptchaConfigLoader {
             setProperty("max-attempts", "3")
             setProperty("timeout-seconds", "30")
             setProperty("verified-cache-minutes", "720")
-            setProperty("noise-blocks", "22")
+            setProperty("noise-blocks", "12")
             setProperty("max-joins-per-window", "6")
             setProperty("join-window-seconds", "10")
+            setProperty("glyph-scale", "2")
+            setProperty("glyph-depth", "3")
             setProperty("glyph-materials", DEFAULT_GLYPH_MATERIALS)
+            setProperty("glyph-side-material", "minecraft:deepslate_tiles")
             setProperty("noise-material", "minecraft:gray_stained_glass")
         }
 
