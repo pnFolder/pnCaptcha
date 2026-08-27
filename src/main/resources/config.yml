@@ -1,9 +1,10 @@
-# ================================================================
-# pnCaptcha 0.4.0
-# One-file configuration. Restart Velocity after changing this file.
-# Any Minecraft block id can be used in material lists, including glass.
-# Weighted materials: bigger weight = chosen more often.
-# ================================================================
+# ============================================================================
+# pnCaptcha 0.5.0 — единая публичная конфигурация
+# После изменений перезапусти Velocity. Старый config.properties не используется.
+# MiniMessage поддерживается во всех messages.* строках:
+#   <red>, <#55ddff>, <gradient:#55ddff:#8b5cf6>, <bold>, <hover:...>, <click:...>
+# ============================================================================
+config-version: 1
 
 general:
   target-server: "lobby"
@@ -13,67 +14,95 @@ general:
   verified-cache-minutes: 720
 
 security:
-  # Connections allowed from one IP inside join-window-seconds.
   max-joins-per-window: 6
   join-window-seconds: 10
-
-  # Each active CAPTCHA has its own tiny in-memory Limbo world.
   max-active-captchas: 128
 
+updates:
+  enabled: true
+  check-on-startup: true
+  startup-delay-seconds: 2
+  repository: "pnFolder/pnCaptcha"
+  request-timeout-seconds: 5
+  notify-console: true
+  notify-players: true
+  notify-permission: "pncaptcha.admin"
+  announce-up-to-date: true
+
 limbo:
-  # Real Limbo view/simulation distance. Increase for very large/far scenes.
+  # Базовая дальность мира Limbo.
   view-distance: 10
   simulation-distance: 8
+
+  # Если CAPTCHA ушла дальше указанной view-distance, pnCaptcha может увеличить её сам.
+  auto-expand-view-distance: true
+  max-auto-view-distance: 16
+
+  # Дополнительные пустые чанки вокруг реального объёма CAPTCHA.
+  precreate-padding-chunks: 1
   reduced-debug-info: false
 
-  # Exactly one real block under the player by default.
+  light:
+    sky: 15
+    block: 15
+
+  # По умолчанию — ровно один блок под игроком.
   pedestal:
     enabled: true
     block: "minecraft:deepslate_tiles"
+    size-x: 1
+    size-z: 1
+    y-offset: -1
 
 player:
   # creative | adventure | survival | spectator
   game-mode: "creative"
 
-  # false is convenient while designing: fly around and inspect the CAPTCHA.
+  # Жёсткая фиксация около spawn. Для настройки лучше false.
   lock-position: false
   lock-radius-blocks: 1.5
 
-  # Absolute Limbo spawn position.
   spawn:
     x: 0.5
     y: 65.0
     z: 0.5
 
   camera:
-    # true = automatically look at the CAPTCHA centre.
+    # true = автоматически смотреть в центр CAPTCHA.
     auto-aim: true
-
-    # Used when auto-aim=false.
     yaw-degrees: 0.0
     pitch-degrees: 0.0
-
-    # Artistic correction added after automatic aiming.
     yaw-offset-degrees: 0.0
     pitch-offset-degrees: 0.0
 
+  # Автовозврат, если игрок упал, улетел или поднялся слишком высоко.
+  recovery:
+    enabled: true
+
+    # 0 = выключить конкретный триггер.
+    below-spawn-blocks: 8.0
+    above-spawn-blocks: 40.0
+    max-horizontal-distance-blocks: 48.0
+
+    # Защита от спама телепортами при частых move-пакетах.
+    cooldown-millis: 500
+
+    # true = при возврате сохранить текущий yaw/pitch игрока.
+    # false = снова смотреть точно на CAPTCHA.
+    preserve-current-look: false
+    send-message: true
+
 scene:
-  # Distance from player spawn to CAPTCHA centre.
+  # Положение центра CAPTCHA относительно игрока.
   distance-blocks: 30.0
 
-  # Direction in which the CAPTCHA centre is placed around the player.
-  # Minecraft-style: 0 = +Z, 90 = -X, -90 = +X, 180 = -Z.
+  # Куда вынести весь объект вокруг игрока:
+  # 0 = +Z, 90 = -X, -90 = +X, 180 = -Z.
   forward-yaw-degrees: 0.0
-
-  # Move the whole object sideways relative to forward-yaw.
   lateral-offset-blocks: 0.0
-
-  # CAPTCHA centre relative to player feet.
   center-height-blocks: 8.0
 
-  # Rotation of the entire 3D text object.
-  # yaw gives the strong perspective/receding-side effect from the reference.
-  # pitch tilts the whole text up/down. roll rotates it clockwise/counter-clockwise.
+  # Полный поворот всей 3D-конструкции.
   rotation:
     yaw-degrees: 28.0
     pitch-degrees: 0.0
@@ -82,13 +111,12 @@ scene:
 font:
   # classic-5x7 | custom
   preset: "classic-5x7"
-
-  # Characters the generator may use. Avoiding 0/O and 1/I/L improves readability.
   alphabet: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-  # Used only with preset: custom.
-  # Every glyph must use the same width and height. 1 = block, 0 = empty.
-  # Example:
+  # При preset: custom можно полностью нарисовать собственный шрифт.
+  # Все символы обязаны иметь одинаковую ширину и высоту.
+  custom-glyphs: {}
+  # Пример:
   # custom-glyphs:
   #   A:
   #     - "01110"
@@ -98,108 +126,173 @@ font:
   #     - "10001"
   #     - "10001"
   #     - "10001"
-  custom-glyphs: {}
 
 geometry:
-  # Size of ONE logical font pixel on the bright front face.
-  # Bigger numbers make letters fatter / taller.
+  # Размер одного пикселя шрифта на лицевой поверхности.
   pixel-width: 2
   pixel-height: 2
 
-  # Actual physical 3D extrusion thickness. 3 = three blocks deep total.
+  # Общая реальная глубина буквы.
   depth-blocks: 3
 
-  # Empty space between characters.
+  # Сколько первых слоёв использовать front-палитру.
+  front-thickness-blocks: 1
+
+  # Сколько последних слоёв использовать back-палитру.
+  back-thickness-blocks: 1
+
   letter-gap-blocks: 2
 
-  # Keep the entire generated line centred around the configured scene centre.
+  # Каждая следующая буква может постепенно идти вверх/вниз и вперёд/назад.
+  letter-rise-blocks: 0.0
+  letter-depth-step-blocks: 0.0
+
   center-text: true
+
+  # Полезно для специальных ракурсов/шрифтов.
+  mirror-horizontal: false
+  mirror-vertical: false
+
+  # false = глубина идёт от игрока; true = объём вытягивается к игроку.
+  extrude-toward-camera: false
 
 randomness:
   enabled: true
-
-  # random = fresh look each CAPTCHA; fixed = reproducible for screenshots/tests.
+  # random | fixed
   seed-mode: "random"
   fixed-seed: 1337
 
   character:
-    # Per-character position variations. Values are +/- maximum blocks.
     horizontal-jitter-blocks: 0
     vertical-jitter-blocks: 1
     depth-jitter-blocks: 1
 
+    # Случайно добавляет 0..N блоков к толщине отдельной буквы.
+    depth-variation-blocks: 0
+
+    # Отдельный небольшой 3D-поворот каждой буквы.
+    rotation-yaw-jitter-degrees: 0.0
+    rotation-pitch-jitter-degrees: 0.0
+    rotation-roll-jitter-degrees: 0.0
+
   scene:
-    # Per-session scene variations, sampled from -value..+value.
     distance-jitter-blocks: 0.0
     height-jitter-blocks: 0.0
+    lateral-jitter-blocks: 0.0
     forward-yaw-jitter-degrees: 0.0
     rotation-yaw-jitter-degrees: 2.0
     rotation-pitch-jitter-degrees: 0.0
     rotation-roll-jitter-degrees: 0.0
 
 palette:
-  # per-block = every voxel may differ
-  # per-character = each character chooses one front/side/back material
-  # solid = always use the first material in each list
+  # per-block = материал выбирается для каждого voxel-блока
+  # per-character = одна палитра на символ
+  # solid = всегда первый блок списка
   mode: "per-block"
 
+  # Вес больше = материал появляется чаще.
   front:
     - block: "minecraft:polished_deepslate"
-      weight: 4
-    - block: "minecraft:deepslate_bricks"
-      weight: 3
-    - block: "minecraft:gray_concrete"
-      weight: 2
+      weight: 5
     - block: "minecraft:cyan_terracotta"
-      weight: 1
+      weight: 3
     - block: "minecraft:light_blue_terracotta"
-      weight: 1
+      weight: 2
 
   side:
     - block: "minecraft:deepslate_tiles"
-      weight: 4
+      weight: 5
     - block: "minecraft:deepslate_bricks"
       weight: 3
     - block: "minecraft:blackstone"
       weight: 2
-    - block: "minecraft:polished_blackstone"
-      weight: 1
 
-  # Material of the deepest/back layer. Useful for a strong dark silhouette.
   back:
     - block: "minecraft:blackstone"
-      weight: 3
-    - block: "minecraft:deepslate_tiles"
+      weight: 4
+    - block: "minecraft:polished_blackstone"
       weight: 2
+
+  # Небольшие светящиеся/яркие вставки на передней поверхности.
+  accent:
+    enabled: true
+    chance-percent: 8.0
+    materials:
+      - block: "minecraft:sea_lantern"
+        weight: 1
+      - block: "minecraft:verdant_froglight"
+        weight: 1
 
 noise:
   enabled: true
-  count: 8
 
-  # Area around the CAPTCHA where random blocks can appear.
+  # Количество центров помех. Один центр может стать маленьким cluster.
+  count: 10
+  cluster-size-min: 1
+  cluster-size-max: 2
+
   horizontal-padding-blocks: 4
   vertical-padding-blocks: 3
 
-  # Noise is placed BEHIND the glyph body, never in front of the readable face.
+  # Помехи располагаются за основной толщиной текста.
   depth-min-blocks: 3
-  depth-max-blocks: 7
+  depth-max-blocks: 8
 
-  # Glass makes the interference partially transparent. Use any solid blocks
-  # instead if you want opaque noise.
+  # Для визуальной "прозрачности" используй glass-блоки.
   materials:
     - block: "minecraft:gray_stained_glass"
-      weight: 4
+      weight: 5
     - block: "minecraft:light_blue_stained_glass"
+      weight: 2
+    - block: "minecraft:cyan_stained_glass"
       weight: 1
 
 messages:
-  prefix: "[pnCaptcha] "
-  prompt: "Type the 3D block code you see in chat."
-  wrong: "Wrong code. Try again ({attempt}/{max})."
-  passed: "Verification passed."
-  timeout: "CAPTCHA timed out."
-  too-many-attempts: "Too many wrong CAPTCHA attempts."
-  busy: "CAPTCHA service is busy. Try again shortly."
-  rate-limited: "Too many connection attempts. Try again in a few seconds."
-  unavailable: "CAPTCHA service is temporarily unavailable."
-  target-missing: "Target server is not configured correctly."
+  enabled: true
+
+  # Любая запись может состоять из нескольких строк.
+  # Поддерживается MiniMessage, hover и click.
+  prompt:
+    - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    - "<gradient:#54F4D1:#4D9CFF><bold>pnCaptcha</bold></gradient> <dark_gray>• <white>Проверка подключения"
+    - "<gray>Посмотри на объёмный код и <white>введи его в чат</white>."
+    - "<gray>Попыток: <aqua>{max}</aqua> <dark_gray>• <gray>Время: <aqua>{timeout}s</aqua>"
+    - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  wrong:
+    - "<red><bold>✕ Неверный код</bold></red> <dark_gray>• <gray>попытка <white>{attempt}</white>/<white>{max}</white>"
+    - "<gray>Проверь символы и отправь ответ ещё раз."
+
+  passed:
+    - "<green><bold>✓ Проверка пройдена</bold></green>"
+    - "<gray>Перенаправляю тебя на сервер…"
+
+  recovered:
+    - "<yellow><bold>↺ Возврат на платформу</bold></yellow>"
+    - "<gray>{reason}</gray>"
+
+  timeout:
+    - "<red><bold>Время проверки истекло.</bold></red>"
+
+  too-many-attempts:
+    - "<red><bold>Слишком много неверных попыток.</bold></red>"
+
+  busy:
+    - "<red>Сервис CAPTCHA сейчас перегружен. Попробуй чуть позже.</red>"
+
+  rate-limited:
+    - "<red>Слишком много подключений с твоего IP. Попробуй позже.</red>"
+
+  unavailable:
+    - "<red>CAPTCHA временно недоступна.</red>"
+
+  target-missing:
+    - "<red>Целевой сервер настроен неправильно.</red>"
+
+  # {current}, {latest}, {url}; строка ниже кликабельна.
+  update-available:
+    - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    - "<gradient:#FFD166:#FF6B6B><bold>Доступно обновление pnCaptcha</bold></gradient>"
+    - "<gray>Установлено: <white>{current}</white> <dark_gray>→ <gray>новое: <green>{latest}</green>"
+    - "<click:open_url:'{url}'><hover:show_text:'<gray>Открыть GitHub Release'><aqua><underlined>Нажми сюда, чтобы открыть релиз</underlined></aqua></hover></click>"
+    - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
