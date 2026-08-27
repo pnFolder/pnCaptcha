@@ -24,19 +24,19 @@ jobs:
         run: gradle clean build --stacktrace
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.2.2.jar
-          jar tf build/libs/pnCaptcha-0.2.2.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.2.2.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-      - name: Publish v0.2.2
+          test -f build/libs/pnCaptcha-0.2.3.jar
+          jar tf build/libs/pnCaptcha-0.2.3.jar | grep -q 'velocity-plugin.json'
+          jar tf build/libs/pnCaptcha-0.2.3.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
+      - name: Publish v0.2.3
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.2 >/dev/null 2>&1; then
-            echo 'Release v0.2.2 already exists; skipping.'
+          if gh release view v0.2.3 >/dev/null 2>&1; then
+            echo 'Release v0.2.3 already exists; skipping.'
           else
-            gh release create v0.2.2 \
-              build/libs/pnCaptcha-0.2.2.jar \
+            gh release create v0.2.3 \
+              build/libs/pnCaptcha-0.2.3.jar \
               --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.2.2' \
-              --notes 'Perspective 3D CAPTCHA update: corrected mirrored glyph orientation, distant off-axis camera, real 5-block Z extrusion, mottled front and side materials, one pedestal block only, and background-only noise. Requires LimboAPI compatibility mode when PacketEvents is installed.'
+              --title 'pnCaptcha 0.2.3' \
+              --notes 'Visibility hotfix: keeps the default CAPTCHA entirely inside Limbo chunks sent at spawn, uses 1x2 front cells with deep 6-block extrusion, batches updates with MULTI_BLOCK_CHANGE, and re-applies the overlay after chunk delivery so late chunk packets cannot erase it.'
           fi
