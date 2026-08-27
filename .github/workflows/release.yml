@@ -1,9 +1,7 @@
 name: release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,55 +10,4 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.7.0'
-
-      - name: Build and test
-        run: gradle clean build --stacktrace
-
-      - name: Verify release jar
-        run: |
-          test -f build/libs/pnCaptcha-0.4.0.jar
-          jar tf build/libs/pnCaptcha-0.4.0.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.4.0.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-          jar tf build/libs/pnCaptcha-0.4.0.jar | grep -q 'config.yml'
-
-      - name: Remove old pnCaptcha releases and tags
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TARGET_TAG: v0.4.0
-        run: |
-          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
-            if [ -n "$tag" ] && [ "$tag" != "$TARGET_TAG" ]; then
-              echo "Deleting old release $tag"
-              gh release delete "$tag" --cleanup-tag -y || true
-            fi
-          done
-
-          gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate --jq '.[].ref' | while read -r ref; do
-            tag="${ref#refs/tags/}"
-            if [ -n "$tag" ] && [ "$tag" != "$TARGET_TAG" ]; then
-              echo "Deleting orphan old tag $tag"
-              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" || true
-            fi
-          done
-
-      - name: Publish v0.4.0
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view v0.4.0 >/dev/null 2>&1; then
-            gh release upload v0.4.0 build/libs/pnCaptcha-0.4.0.jar --clobber
-          else
-            gh release create v0.4.0 \
-              build/libs/pnCaptcha-0.4.0.jar \
-              --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.4.0' \
-              --notes 'Single-config overhaul: one documented config.yml controls verification, Limbo distances, player/camera position, full yaw/pitch/roll scene orientation, custom bitmap fonts, voxel width/height/depth, character and scene randomness, weighted front/side/back block palettes, transparent or opaque noise, pedestal settings, messages and protection limits. PacketEvents is not required; CAPTCHA blocks are real Limbo VirtualWorld blocks.'
-          fi
+      - run: echo 'Release is paused until pnCaptcha 0.5.0 passes CI.'
