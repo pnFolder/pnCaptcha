@@ -27,7 +27,7 @@ import kotlin.math.abs
 @Plugin(
     id = "pncaptcha",
     name = "pnCaptcha",
-    version = "0.2.4",
+    version = "0.2.5",
     description = "Configurable angled 3D packet CAPTCHA in a shared Velocity Limbo",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
@@ -71,7 +71,7 @@ class PnCaptchaPlugin @Inject constructor(
 
         logger.info(
             "pnCaptcha {} initialized on Velocity {} (target={}, timeout={}s, attempts={})",
-            "0.2.4",
+            "0.2.5",
             proxy.version.version,
             config.targetServer,
             config.timeout.seconds,
