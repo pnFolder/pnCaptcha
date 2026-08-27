@@ -6,18 +6,16 @@ import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.LimboSessionHandler
 import net.elytrium.limboapi.api.chunk.Dimension
 import net.elytrium.limboapi.api.player.GameMode
+import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfig
 
 /**
  * One shared in-memory Limbo world for every CAPTCHA session.
  *
- * The virtual world contains exactly one physical pedestal block. The CAPTCHA
- * itself remains a per-client PacketEvents overlay.
- *
- * The camera sits left of the object and looks diagonally across its real Z
- * extrusion. The entire default CAPTCHA volume is intentionally kept in the
- * spawn chunk plus immediately adjacent chunks so the client has those chunks
- * before fake block updates are applied.
+ * There is still exactly one physical pedestal block. The angled letters are
+ * PacketEvents overlays. Spawn yaw/pitch are derived from the configured scene
+ * so changing CAPTCHA distance or vertical placement keeps the camera aimed at
+ * the centre automatically.
  */
 class CaptchaLimboEnvironment(
     private val factory: LimboFactory,
@@ -25,23 +23,36 @@ class CaptchaLimboEnvironment(
 ) : AutoCloseable {
     val limbo: Limbo
 
+    val spawnX: Double = CaptchaScene.SPAWN_X
+    val spawnY: Double = CaptchaScene.SPAWN_Y
+    val spawnZ: Double = CaptchaScene.SPAWN_Z
+    val spawnYaw: Float = CaptchaScene.spawnYaw(config)
+    val spawnPitch: Float = CaptchaScene.spawnPitch(config)
+
     init {
         val world = factory.createVirtualWorld(
             Dimension.OVERWORLD,
-            SPAWN_X,
-            SPAWN_Y,
-            SPAWN_Z,
-            SPAWN_YAW,
-            SPAWN_PITCH
+            spawnX,
+            spawnY,
+            spawnZ,
+            spawnYaw,
+            spawnPitch
         )
 
         val pedestal = factory.createSimpleBlock("minecraft:deepslate_tiles")
-        world.setBlock(PEDESTAL_X, 64, PEDESTAL_Z, pedestal)
+        world.setBlock(
+            CaptchaScene.PEDESTAL_X,
+            CaptchaScene.PEDESTAL_Y,
+            CaptchaScene.PEDESTAL_Z,
+            pedestal
+        )
 
-        // Only prepare nearby chunks. The default 3D CAPTCHA is deliberately
-        // bounded to this area instead of relying on far chunks arriving later.
-        for (chunkX in -2..1) {
-            for (chunkZ in -1..1) {
+        // Pre-create every chunk the configured volume may touch. LimboAPI's
+        // own spawn-chunk radius still controls exactly when distant chunks are
+        // delivered, while the renderer re-applies its overlay after delivery.
+        val bounds = CaptchaScene.chunkBounds(config)
+        for (chunkX in bounds.minX..bounds.maxX) {
+            for (chunkZ in bounds.minZ..bounds.maxZ) {
                 world.getChunkOrNew(chunkX, chunkZ)
             }
         }
@@ -53,7 +64,7 @@ class CaptchaLimboEnvironment(
             .setName("pnCaptcha")
             .setGameMode(GameMode.ADVENTURE)
             .setReadTimeout(config.timeout.toMillis().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() + 5_000)
-            .setViewDistance(4)
+            .setViewDistance(CaptchaScene.recommendedViewDistance(config))
             .setSimulationDistance(2)
             .setReducedDebugInfo(true)
             .setShouldRespawn(true)
@@ -66,19 +77,5 @@ class CaptchaLimboEnvironment(
 
     override fun close() {
         limbo.dispose()
-    }
-
-    companion object {
-        private const val PEDESTAL_X: Int = -7
-        private const val PEDESTAL_Z: Int = 0
-
-        const val SPAWN_X: Double = -6.5
-        const val SPAWN_Y: Double = 65.0
-        const val SPAWN_Z: Double = 0.5
-
-        // Looks at approximately (0, 71.5, 16.5): strong oblique angle that
-        // exposes the 6-block Z extrusion while keeping the face readable.
-        const val SPAWN_YAW: Float = -26.0f
-        const val SPAWN_PITCH: Float = -18.0f
     }
 }
