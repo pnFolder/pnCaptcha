@@ -24,19 +24,19 @@ jobs:
         run: gradle clean build --stacktrace
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.2.1.jar
-          jar tf build/libs/pnCaptcha-0.2.1.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.2.1.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
-      - name: Publish v0.2.1
+          test -f build/libs/pnCaptcha-0.2.2.jar
+          jar tf build/libs/pnCaptcha-0.2.2.jar | grep -q 'velocity-plugin.json'
+          jar tf build/libs/pnCaptcha-0.2.2.jar | grep -q 'ru/privatenull/pncaptcha/PnCaptchaPlugin.class'
+      - name: Publish v0.2.2
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view v0.2.1 >/dev/null 2>&1; then
-            echo 'Release v0.2.1 already exists; skipping.'
+          if gh release view v0.2.2 >/dev/null 2>&1; then
+            echo 'Release v0.2.2 already exists; skipping.'
           else
-            gh release create v0.2.1 \
-              build/libs/pnCaptcha-0.2.1.jar \
+            gh release create v0.2.2 \
+              build/libs/pnCaptcha-0.2.2.jar \
               --target "$GITHUB_SHA" \
-              --title 'pnCaptcha 0.2.1' \
-              --notes '3D voxel CAPTCHA update: one pedestal block only, 2x readable glyph cells, configurable 3-block extrusion, shifted dark side layers, and background-only noise. Requires LimboAPI compatibility mode when PacketEvents is installed.'
+              --title 'pnCaptcha 0.2.2' \
+              --notes 'Perspective 3D CAPTCHA update: corrected mirrored glyph orientation, distant off-axis camera, real 5-block Z extrusion, mottled front and side materials, one pedestal block only, and background-only noise. Requires LimboAPI compatibility mode when PacketEvents is installed.'
           fi
