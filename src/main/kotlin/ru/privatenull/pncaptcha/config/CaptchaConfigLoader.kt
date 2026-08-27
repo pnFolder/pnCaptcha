@@ -7,6 +7,7 @@ import java.util.Properties
 
 object CaptchaConfigLoader {
     private const val FILE_NAME = "config.properties"
+    private const val CONFIG_VERSION = 4
 
     fun load(dataDirectory: Path): CaptchaConfig {
         Files.createDirectories(dataDirectory)
@@ -18,6 +19,10 @@ object CaptchaConfigLoader {
 
         val properties = Properties()
         Files.newInputStream(path).use(properties::load)
+
+        if (migrateAndFillDefaults(properties)) {
+            store(path, properties)
+        }
 
         val legacySideMaterial = properties.string("glyph-side-material", "")
         val sideMaterials = properties.string(
@@ -57,35 +62,50 @@ object CaptchaConfigLoader {
         )
     }
 
-    private fun writeDefaults(path: Path) {
-        val properties = Properties().apply {
-            setProperty("target-server", "lobby")
-            setProperty("captcha-length", "5")
-            setProperty("max-attempts", "3")
-            setProperty("timeout-seconds", "30")
-            setProperty("verified-cache-minutes", "720")
-            setProperty("noise-blocks", "8")
-            setProperty("max-joins-per-window", "6")
-            setProperty("join-window-seconds", "10")
+    /**
+     * Adds newly introduced options to existing files so users can actually see
+     * and edit them. For the exact stock 0.2.3 visual defaults (1x2, depth 6),
+     * migrate to the new 0.2.4 look (2x2, depth 3). Custom older values are left
+     * untouched.
+     */
+    private fun migrateAndFillDefaults(properties: Properties): Boolean {
+        var changed = false
+        val oldVersion = properties.int("config-version", 3)
 
-            // Placement/perspective.
-            setProperty("captcha-distance-blocks", "30.0")
-            setProperty("captcha-angle-degrees", "28.0")
-            setProperty("captcha-center-height-blocks", "8.0")
-            setProperty("camera-pitch-offset-degrees", "0.0")
-
-            // Mass and spacing.
-            setProperty("glyph-scale-x", "2")
-            setProperty("glyph-scale-y", "2")
-            setProperty("glyph-depth", "3")
-            setProperty("glyph-gap-blocks", "2")
-            setProperty("glyph-jitter-y-blocks", "1")
-            setProperty("glyph-jitter-depth-blocks", "1")
-            setProperty("glyph-materials", DEFAULT_GLYPH_MATERIALS)
-            setProperty("glyph-side-materials", DEFAULT_SIDE_MATERIALS)
-            setProperty("noise-material", "minecraft:gray_stained_glass")
+        if (oldVersion < CONFIG_VERSION) {
+            if (properties.getProperty("glyph-scale-x")?.trim() == "1") {
+                properties.setProperty("glyph-scale-x", "2")
+                changed = true
+            }
+            if (properties.getProperty("glyph-depth")?.trim() == "6") {
+                properties.setProperty("glyph-depth", "3")
+                changed = true
+            }
         }
 
+        DEFAULT_PROPERTIES.forEach { (key, value) ->
+            if (!properties.containsKey(key)) {
+                properties.setProperty(key, value)
+                changed = true
+            }
+        }
+
+        if (properties.getProperty("config-version") != CONFIG_VERSION.toString()) {
+            properties.setProperty("config-version", CONFIG_VERSION.toString())
+            changed = true
+        }
+
+        return changed
+    }
+
+    private fun writeDefaults(path: Path) {
+        val properties = Properties()
+        DEFAULT_PROPERTIES.forEach(properties::setProperty)
+        properties.setProperty("config-version", CONFIG_VERSION.toString())
+        store(path, properties)
+    }
+
+    private fun store(path: Path, properties: Properties) {
         Files.newOutputStream(path).use { output ->
             properties.store(output, "pnCaptcha configuration")
         }
@@ -102,6 +122,34 @@ object CaptchaConfigLoader {
 
     private fun Properties.double(key: String, default: Double): Double =
         getProperty(key)?.trim()?.toDoubleOrNull() ?: default
+
+    private val DEFAULT_PROPERTIES = linkedMapOf(
+        "target-server" to "lobby",
+        "captcha-length" to "5",
+        "max-attempts" to "3",
+        "timeout-seconds" to "30",
+        "verified-cache-minutes" to "720",
+        "noise-blocks" to "8",
+        "max-joins-per-window" to "6",
+        "join-window-seconds" to "10",
+
+        // Placement/perspective.
+        "captcha-distance-blocks" to "30.0",
+        "captcha-angle-degrees" to "28.0",
+        "captcha-center-height-blocks" to "8.0",
+        "camera-pitch-offset-degrees" to "0.0",
+
+        // Mass and spacing.
+        "glyph-scale-x" to "2",
+        "glyph-scale-y" to "2",
+        "glyph-depth" to "3",
+        "glyph-gap-blocks" to "2",
+        "glyph-jitter-y-blocks" to "1",
+        "glyph-jitter-depth-blocks" to "1",
+        "glyph-materials" to DEFAULT_GLYPH_MATERIALS,
+        "glyph-side-materials" to DEFAULT_SIDE_MATERIALS,
+        "noise-material" to "minecraft:gray_stained_glass"
+    )
 
     private const val DEFAULT_GLYPH_MATERIALS =
         "minecraft:polished_deepslate,minecraft:deepslate_bricks,minecraft:gray_concrete,minecraft:cyan_terracotta,minecraft:light_blue_terracotta"
