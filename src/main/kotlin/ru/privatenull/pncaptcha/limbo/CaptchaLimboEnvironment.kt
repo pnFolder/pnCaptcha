@@ -11,13 +11,13 @@ import ru.privatenull.pncaptcha.config.CaptchaConfig
 /**
  * One shared in-memory Limbo world for every CAPTCHA session.
  *
- * The real virtual world contains exactly one pedestal block under the player.
- * CAPTCHA glyphs and decorative noise are client-only PacketEvents overlays.
+ * The virtual world contains exactly one physical pedestal block. The CAPTCHA
+ * itself remains a per-client PacketEvents overlay.
  *
- * The spawn is deliberately offset to the left of the CAPTCHA centre. The
- * player therefore looks at the extruded voxel text at an oblique angle and
- * sees its real Z-depth, similar to an isometric 3D sculpture rather than a
- * flat bitmap wall.
+ * The camera sits left of the object and looks diagonally across its real Z
+ * extrusion. The entire default CAPTCHA volume is intentionally kept in the
+ * spawn chunk plus immediately adjacent chunks so the client has those chunks
+ * before fake block updates are applied.
  */
 class CaptchaLimboEnvironment(
     private val factory: LimboFactory,
@@ -38,10 +38,10 @@ class CaptchaLimboEnvironment(
         val pedestal = factory.createSimpleBlock("minecraft:deepslate_tiles")
         world.setBlock(PEDESTAL_X, 64, PEDESTAL_Z, pedestal)
 
-        // Pre-create empty chunks that contain the distant 3D overlay. Fake
-        // block changes are most reliable after the client has the chunks.
-        for (chunkX in -3..3) {
-            for (chunkZ in -1..4) {
+        // Only prepare nearby chunks. The default 3D CAPTCHA is deliberately
+        // bounded to this area instead of relying on far chunks arriving later.
+        for (chunkX in -2..1) {
+            for (chunkZ in -1..1) {
                 world.getChunkOrNew(chunkX, chunkZ)
             }
         }
@@ -53,7 +53,7 @@ class CaptchaLimboEnvironment(
             .setName("pnCaptcha")
             .setGameMode(GameMode.ADVENTURE)
             .setReadTimeout(config.timeout.toMillis().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() + 5_000)
-            .setViewDistance(6)
+            .setViewDistance(4)
             .setSimulationDistance(2)
             .setReducedDebugInfo(true)
             .setShouldRespawn(true)
@@ -69,15 +69,16 @@ class CaptchaLimboEnvironment(
     }
 
     companion object {
-        private const val PEDESTAL_X: Int = -5
+        private const val PEDESTAL_X: Int = -7
         private const val PEDESTAL_Z: Int = 0
 
-        const val SPAWN_X: Double = -4.5
+        const val SPAWN_X: Double = -6.5
         const val SPAWN_Y: Double = 65.0
         const val SPAWN_Z: Double = 0.5
 
-        // Target is approximately (10, 73, 42): ~19 degrees off-axis.
-        const val SPAWN_YAW: Float = -19.0f
-        const val SPAWN_PITCH: Float = -9.0f
+        // Looks at approximately (0, 71.5, 16.5): strong oblique angle that
+        // exposes the 6-block Z extrusion while keeping the face readable.
+        const val SPAWN_YAW: Float = -26.0f
+        const val SPAWN_PITCH: Float = -18.0f
     }
 }
