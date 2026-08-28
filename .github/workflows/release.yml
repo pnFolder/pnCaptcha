@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ github.event.head_commit.message == 'release pnCaptcha 1.1.0' }}
+    if: ${{ github.event.head_commit.message == 'release pnCaptcha 1.1.1' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
 
       - name: Verify release jar
         run: |
-          JAR="build/libs/pnCaptcha-1.1.0.jar"
+          JAR="build/libs/pnCaptcha-1.1.1.jar"
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'velocity-plugin.json'
           jar tf "$JAR" | grep -q 'config.yml'
@@ -43,41 +43,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<'EOF'
-          # Интерактивные BossBar Actions и самодокументируемый конфиг
+          # Корректная bStats-статистика
 
-          pnCaptcha теперь позволяет собирать живой интерфейс проверки через BossBar Actions и настраивать каждый параметр прямо по комментариям и примерам в config.yml.
+          pnCaptcha теперь отправляет агрегированную статистику в правильный bStats-проект для Velocity.
 
           ## Новое
-          - Добавлен Action `bossbar` с отдельными панелями по `bossbar-id` для каждого игрока.
-          - Добавлены операции BossBar `show`, `update`, `animate`, `set-progress`, `add-progress`, `pause`, `resume`, `hide` и `remove`.
-          - Добавлена плавная анимация BossBar от заданного начального progress к конечному progress.
-          - Добавлен автоматический countdown по общему timeout CAPTCHA при `bossbar-duration-ms: 0`.
-          - Добавлена поддержка countup-анимации через диапазон progress от `0.0` до `1.0`.
-          - Добавлено изменение активной BossBar-анимации во время работы через `add-progress` и `set-progress`.
-          - Добавлены настраиваемые цвет и overlay BossBar, включая сегментированные варианты.
-          - Добавлены placeholders BossBar `{bossbar_progress}`, `{bossbar_percent}`, `{bossbar_seconds}` и `{bossbar_millis}`.
-          - Добавлена возможность автоматически скрывать или полностью удалять BossBar после окончания анимации.
-          - Добавлен стандартный CAPTCHA BossBar-таймер, который уменьшается со временем и получает дополнительный штраф после неверного ответа.
-          - Добавлены placeholders `{remaining}` и `{timeout}` для остальных Actions.
-          - Добавлены копируемые примеры для каждого типа Action прямо в стандартный config.yml.
+          - Добавлен актуальный bStats service ID `33698` для Velocity-проекта pnCaptcha.
 
           ## Улучшено
-          - Улучшена документация config.yml: каждый основной параметр теперь сопровождается назначением, допустимыми значениями и практическим примером.
-          - Улучшена документация Actions: в конфиге перечислены все triggers, types, общие поля, terminal-поведение и BossBar-операции.
-          - Улучшена независимость Actions от стандартных chat-сообщений: отключение `messages.enabled` больше не отключает Title, ActionBar, BossBar и текстовые Actions.
-          - Улучшена очистка интерфейса: активные BossBar и их scheduler-задачи удаляются при завершении проверки, отключении игрока и остановке прокси.
-          - Улучшена диагностика сборки: CI отдельно проверяет наличие BossBarService в итоговом shaded JAR.
+          - Улучшена точность публичной статистики установок и custom charts pnCaptcha.
 
           ## Исправлено
-          - Исправлено зависание визуальных элементов после выхода игрока из CAPTCHA-сессии.
-          - Исправлена ситуация, когда отключённые стандартные сообщения могли оставлять Actions без отформатированного текста.
+          - Исправлена отправка метрик в ранее созданный bStats-проект с неправильной платформой.
+          - Исправлен bStats service ID в документации и runtime-конфигурации плагина.
 
           ## Важно
-          > Схема конфигурации обновлена: старый config.yml автоматически сохраняется как config.pre-1.1.0.yml.bak, после чего создаётся новый полностью документированный config.yml. Предыдущие GitHub Releases и теги сохраняются.
+          > Конфигурацию менять не требуется: достаточно заменить JAR и перезапустить Velocity.
           EOF
 
-          gh release create v1.1.0 \
-            build/libs/pnCaptcha-1.1.0.jar \
+          gh release create v1.1.1 \
+            build/libs/pnCaptcha-1.1.1.jar \
             --target "$GITHUB_SHA" \
-            --title 'pnCaptcha — BossBar Actions и понятная конфигурация' \
+            --title 'pnCaptcha — корректная bStats-статистика' \
             --notes-file release-notes.md
