@@ -7,7 +7,7 @@ import java.nio.file.StandardCopyOption
 
 object CaptchaConfigLoader {
     private const val FILE_NAME = "config.yml"
-    private const val CONFIG_VERSION = 1
+    private const val CONFIG_VERSION = 2
 
     fun load(dataDirectory: Path): CaptchaConfig {
         Files.createDirectories(dataDirectory)
@@ -18,7 +18,7 @@ object CaptchaConfigLoader {
         } else {
             val existing = readRoot(path)
             if (existing.int("config-version", 0) != CONFIG_VERSION) {
-                val backup = dataDirectory.resolve("config.pre-0.5.0.yml.bak")
+                val backup = dataDirectory.resolve("config.pre-1.0.0.yml.bak")
                 Files.copy(path, backup, StandardCopyOption.REPLACE_EXISTING)
                 copyDefault(path)
             }
@@ -29,16 +29,34 @@ object CaptchaConfigLoader {
 
         return CaptchaConfig(
             general = GeneralConfig(
-                targetServer = root.string("general.target-server", defaults.general.targetServer),
                 captchaLength = root.int("general.captcha-length", defaults.general.captchaLength),
                 maxAttempts = root.int("general.max-attempts", defaults.general.maxAttempts),
                 timeoutSeconds = root.long("general.timeout-seconds", defaults.general.timeoutSeconds),
-                verifiedCacheMinutes = root.long("general.verified-cache-minutes", defaults.general.verifiedCacheMinutes)
+                verifiedCacheMinutes = root.long("general.verified-cache-minutes", defaults.general.verifiedCacheMinutes),
+                input = InputConfig(
+                    caseSensitive = root.bool("general.input.case-sensitive", defaults.general.input.caseSensitive),
+                    trim = root.bool("general.input.trim", defaults.general.input.trim),
+                    removeSpaces = root.bool("general.input.remove-spaces", defaults.general.input.removeSpaces),
+                    maxLength = root.int("general.input.max-length", defaults.general.input.maxLength)
+                )
+            ),
+            routing = RoutingConfig(
+                strategy = root.string("routing.strategy", defaults.routing.strategy),
+                networkMaxPlayers = root.int("routing.network-max-players", defaults.routing.networkMaxPlayers),
+                networkReserveSlots = root.int("routing.network-reserve-slots", defaults.routing.networkReserveSlots),
+                fullBypassPermission = root.string("routing.full-bypass-permission", defaults.routing.fullBypassPermission),
+                fallbackToAnyRegistered = root.bool("routing.fallback-to-any-registered", defaults.routing.fallbackToAnyRegistered),
+                servers = root.routeServers("routing.servers", defaults.routing.servers)
             ),
             security = SecurityConfig(
                 maxJoinsPerWindow = root.int("security.max-joins-per-window", defaults.security.maxJoinsPerWindow),
                 joinWindowSeconds = root.long("security.join-window-seconds", defaults.security.joinWindowSeconds),
-                maxActiveCaptchas = root.int("security.max-active-captchas", defaults.security.maxActiveCaptchas)
+                maxActiveCaptchas = root.int("security.max-active-captchas", defaults.security.maxActiveCaptchas),
+                bypassPermission = root.string("security.bypass-permission", defaults.security.bypassPermission)
+            ),
+            metrics = MetricsConfig(
+                enabled = root.bool("metrics.enabled", defaults.metrics.enabled),
+                customCharts = root.bool("metrics.custom-charts", defaults.metrics.customCharts)
             ),
             updates = UpdateConfig(
                 enabled = root.bool("updates.enabled", defaults.updates.enabled),
@@ -60,6 +78,8 @@ object CaptchaConfigLoader {
                 reducedDebugInfo = root.bool("limbo.reduced-debug-info", defaults.limbo.reducedDebugInfo),
                 skyLightLevel = root.int("limbo.light.sky", defaults.limbo.skyLightLevel),
                 blockLightLevel = root.int("limbo.light.block", defaults.limbo.blockLightLevel),
+                worldTimeTicks = root.long("limbo.world-time-ticks", defaults.limbo.worldTimeTicks),
+                fallingEnabled = root.bool("limbo.falling-enabled", defaults.limbo.fallingEnabled),
                 pedestal = PedestalConfig(
                     enabled = root.bool("limbo.pedestal.enabled", defaults.limbo.pedestal.enabled),
                     block = root.string("limbo.pedestal.block", defaults.limbo.pedestal.block),
@@ -170,6 +190,10 @@ object CaptchaConfigLoader {
                 clusterSizeMax = root.int("noise.cluster-size-max", defaults.noise.clusterSizeMax),
                 materials = root.weightedMaterials("noise.materials", defaults.noise.materials)
             ),
+            actions = ActionsConfig(
+                enabled = root.bool("actions.enabled", defaults.actions.enabled),
+                triggers = root.actionTriggers("actions.triggers")
+            ),
             messages = MessageConfig(
                 enabled = root.bool("messages.enabled", defaults.messages.enabled),
                 prompt = root.stringList("messages.prompt", defaults.messages.prompt),
@@ -180,8 +204,9 @@ object CaptchaConfigLoader {
                 tooManyAttempts = root.stringList("messages.too-many-attempts", defaults.messages.tooManyAttempts),
                 busy = root.stringList("messages.busy", defaults.messages.busy),
                 rateLimited = root.stringList("messages.rate-limited", defaults.messages.rateLimited),
+                networkFull = root.stringList("messages.network-full", defaults.messages.networkFull),
                 unavailable = root.stringList("messages.unavailable", defaults.messages.unavailable),
-                targetMissing = root.stringList("messages.target-missing", defaults.messages.targetMissing),
+                routeUnavailable = root.stringList("messages.route-unavailable", defaults.messages.routeUnavailable),
                 updateAvailable = root.stringList("messages.update-available", defaults.messages.updateAvailable)
             )
         )
@@ -247,10 +272,7 @@ object CaptchaConfigLoader {
                 is String -> WeightedMaterial(entry.trim(), 1).takeIf { it.block.isNotEmpty() }
                 is Map<*, *> -> {
                     val block = entry["block"]?.toString()?.trim().orEmpty()
-                    val weight = when (val weightValue = entry["weight"]) {
-                        is Number -> weightValue.toInt()
-                        else -> weightValue?.toString()?.toIntOrNull() ?: 1
-                    }
+                    val weight = entry.intValue("weight", 1)
                     if (block.isNotEmpty() && weight > 0) WeightedMaterial(block, weight) else null
                 }
                 else -> null
@@ -259,12 +281,105 @@ object CaptchaConfigLoader {
         return parsed.ifEmpty { defaults }
     }
 
+    private fun Map<String, Any?>.routeServers(path: String, defaults: List<RouteServerConfig>): List<RouteServerConfig> {
+        val raw = value(path) as? List<*> ?: return defaults
+        val parsed = raw.mapNotNull { entry ->
+            val map = entry as? Map<*, *> ?: return@mapNotNull null
+            val name = map["name"]?.toString()?.trim().orEmpty()
+            if (name.isEmpty()) return@mapNotNull null
+            RouteServerConfig(
+                name = name,
+                enabled = map.boolValue("enabled", true),
+                priority = map.intValue("priority", 100),
+                weight = map.intValue("weight", 1),
+                maxPlayers = map.intValue("max-players", 0),
+                reserveSlots = map.intValue("reserve-slots", 0)
+            )
+        }
+        return parsed.ifEmpty { defaults }
+    }
+
+    private fun Map<String, Any?>.actionTriggers(path: String): Map<String, List<ActionDefinition>> {
+        val raw = value(path) as? Map<*, *> ?: return emptyMap()
+        return raw.mapNotNull { (triggerKey, rawActions) ->
+            val trigger = triggerKey?.toString()?.trim()?.lowercase().orEmpty()
+            if (trigger.isEmpty()) return@mapNotNull null
+            val actions = (rawActions as? List<*>)?.mapNotNull { actionEntry ->
+                val map = actionEntry as? Map<*, *> ?: return@mapNotNull null
+                ActionDefinition(
+                    enabled = map.boolValue("enabled", true),
+                    type = map["type"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "message" },
+                    delayMillis = map.longValue("delay-ms", 0L),
+                    chancePercent = map.doubleValue("chance-percent", 100.0),
+                    permission = map["permission"]?.toString()?.trim().orEmpty(),
+                    stopAfter = map.boolValue("stop-after", false),
+                    text = map["text"]?.toString().orEmpty(),
+                    lines = map.stringListValue("lines"),
+                    command = map["command"]?.toString().orEmpty(),
+                    server = map["server"]?.toString()?.trim().orEmpty(),
+                    x = map.nullableDouble("x"),
+                    y = map.nullableDouble("y"),
+                    z = map.nullableDouble("z"),
+                    teleportYaw = map.nullableDouble("yaw")?.toFloat(),
+                    teleportPitch = map.nullableDouble("pitch")?.toFloat(),
+                    title = map["title"]?.toString().orEmpty(),
+                    subtitle = map["subtitle"]?.toString().orEmpty(),
+                    fadeInMillis = map.longValue("fade-in-ms", 250L),
+                    stayMillis = map.longValue("stay-ms", 1500L),
+                    fadeOutMillis = map.longValue("fade-out-ms", 250L),
+                    sound = map["sound"]?.toString()?.trim().orEmpty().ifEmpty { "minecraft:block.note_block.pling" },
+                    source = map["source"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "master" },
+                    volume = map.doubleValue("volume", 1.0).toFloat(),
+                    soundPitch = map.doubleValue("sound-pitch", 1.0).toFloat(),
+                    gameMode = map["game-mode"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "adventure" }
+                )
+            }.orEmpty()
+            trigger to actions
+        }.toMap()
+    }
+
     private fun Map<String, Any?>.customGlyphs(path: String): Map<Char, List<String>> {
         val raw = value(path) as? Map<*, *> ?: return emptyMap()
         return raw.mapNotNull { (key, value) ->
             val char = key?.toString()?.singleOrNull() ?: return@mapNotNull null
-            val rows = (value as? List<*>)?.map { it.toString() } ?: return@mapNotNull null
-            char.uppercaseChar() to rows
+            val rows = (value as? List<*>)?.map { it?.toString().orEmpty() }.orEmpty()
+            if (rows.isEmpty()) null else char to rows
         }.toMap()
+    }
+
+    private fun Map<*, *>.boolValue(key: String, default: Boolean): Boolean = when (val raw = this[key]) {
+        is Boolean -> raw
+        is Number -> raw.toInt() != 0
+        else -> when (raw?.toString()?.trim()?.lowercase()) {
+            "true", "yes", "on", "1" -> true
+            "false", "no", "off", "0" -> false
+            else -> default
+        }
+    }
+
+    private fun Map<*, *>.intValue(key: String, default: Int): Int = when (val raw = this[key]) {
+        is Number -> raw.toInt()
+        else -> raw?.toString()?.trim()?.toIntOrNull()
+    } ?: default
+
+    private fun Map<*, *>.longValue(key: String, default: Long): Long = when (val raw = this[key]) {
+        is Number -> raw.toLong()
+        else -> raw?.toString()?.trim()?.toLongOrNull()
+    } ?: default
+
+    private fun Map<*, *>.doubleValue(key: String, default: Double): Double = when (val raw = this[key]) {
+        is Number -> raw.toDouble()
+        else -> raw?.toString()?.trim()?.toDoubleOrNull()
+    } ?: default
+
+    private fun Map<*, *>.nullableDouble(key: String): Double? = when (val raw = this[key]) {
+        is Number -> raw.toDouble()
+        else -> raw?.toString()?.trim()?.toDoubleOrNull()
+    }
+
+    private fun Map<*, *>.stringListValue(key: String): List<String> = when (val raw = this[key]) {
+        is List<*> -> raw.mapNotNull { it?.toString() }
+        is String -> listOf(raw)
+        else -> emptyList()
     }
 }
