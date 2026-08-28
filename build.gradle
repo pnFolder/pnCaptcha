@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '0.5.0'
+version = '1.0.0'
 
 repositories {
     mavenCentral()
@@ -58,7 +58,6 @@ tasks.named('shadowJar') {
     archiveClassifier = ''
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    // bStats recommends shading + relocation for plugins to avoid class conflicts.
     relocate 'org.bstats', 'ru.privatenull.pncaptcha.lib.bstats'
 }
 
