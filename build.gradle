@@ -20,6 +20,7 @@ dependencies {
 
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
     implementation 'org.yaml:snakeyaml:2.3'
+    implementation 'org.bstats:bstats-velocity:3.2.1'
     implementation('net.kyori:adventure-text-minimessage:4.17.0') {
         exclude group: 'net.kyori', module: 'adventure-api'
     }
@@ -56,6 +57,9 @@ tasks.named('shadowJar') {
     archiveFileName = "pnCaptcha-${project.version}.jar"
     archiveClassifier = ''
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    // bStats recommends shading + relocation for plugins to avoid class conflicts.
+    relocate 'org.bstats', 'ru.privatenull.pncaptcha.lib.bstats'
 }
 
 tasks.named('build') { dependsOn tasks.named('shadowJar') }
