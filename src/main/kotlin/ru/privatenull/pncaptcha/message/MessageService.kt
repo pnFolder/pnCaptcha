@@ -10,7 +10,7 @@ class MessageService(
     private val miniMessage: MiniMessage = MiniMessage.miniMessage()
 ) {
     fun component(lines: List<String>, placeholders: Map<String, Any?> = emptyMap()): Component {
-        if (!config.messages.enabled || lines.isEmpty()) return Component.empty()
+        if (lines.isEmpty()) return Component.empty()
 
         val rendered = lines.map { line ->
             var text = line
