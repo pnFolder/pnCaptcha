@@ -177,7 +177,7 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "1.1.0"
-        const val BSTATS_SERVICE_ID = 33692
+        const val VERSION = "1.1.1"
+        const val BSTATS_SERVICE_ID = 33698
     }
 }
