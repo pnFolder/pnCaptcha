@@ -18,6 +18,15 @@ jobs:
           gradle-version: '9.7.0'
       - name: Build and test
         run: gradle clean build --stacktrace
+      - name: Verify shaded runtime dependencies
+        run: |
+          JAR="build/libs/pnCaptcha-0.5.0.jar"
+          test -f "$JAR"
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class'
+          if jar tf "$JAR" | grep -q '^org/bstats/'; then
+            echo 'bStats was not relocated correctly'
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: pnCaptcha
