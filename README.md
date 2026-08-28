@@ -1,8 +1,6 @@
 # pnCaptcha
 
-`pnCaptcha` — CAPTCHA-шлюз для Velocity 3.5.x. Проверка проходит в отдельном лёгком LimboAPI `VirtualWorld`, поэтому Paper/backend не принимает непроверенные подключения. CAPTCHA строится реальными виртуальными блоками внутри Limbo до входа игрока; PacketEvents не нужен.
-
-Текущая версия: **0.5.0**.
+`pnCaptcha` — настраиваемый 3D CAPTCHA-шлюз для Velocity. Непроверенный игрок попадает в персональный LimboAPI `VirtualWorld`, видит объёмный voxel-код и только после успешной проверки маршрутизируется на доступный backend.
 
 ## Требования
 
@@ -10,108 +8,95 @@
 - Velocity 3.5.x
 - LimboAPI 1.1.26+
 
-## Архитектура
+PacketEvents не требуется.
 
-```text
-Internet -> Velocity -> проверка cache/rate-limit -> LimboAPI 3D CAPTCHA -> lobby
-```
+## Основное
 
-Для каждой активной проверки создаётся маленький in-memory мир. После успешной проверки, disconnect, timeout или исчерпания попыток мир освобождается. Количество одновременно активных CAPTCHA ограничивается через `security.max-active-captchas`.
+- Реальная 3D voxel CAPTCHA внутри LimboAPI `VirtualWorld` без Paper/backend для проверки.
+- Полная настройка расстояния, позиции, yaw/pitch/roll, размеров voxel, глубины, front/back-слоёв и расстояния между символами.
+- Встроенный `classic-5x7` и пользовательский bitmap-шрифт из `0/1` прямо в `config.yml`.
+- Weighted-палитры front/side/back, accent-блоки, прозрачные glass-помехи и отдельные параметры рандомизации.
+- Recovery при падении, слишком большой высоте и выходе за горизонтальный радиус.
+- Многострочные MiniMessage-сообщения, HEX, gradients, hover и click.
+- Actions на события CAPTCHA: `message`, `actionbar`, `title`, `sound`, `command`, `disconnect`, `connect`, `teleport`, `gamemode`.
+- Несколько backend-серверов с `priority`, `least-players`, `random`, `weighted-random`, `round-robin` и `first-available`.
+- Общий лимит сети, резервные слоты и отдельные лимиты/резервные слоты каждого backend.
+- IP rate-limit, TTL cache проверенных UUID/IP, bypass permission и лимит одновременно активных CAPTCHA-миров.
+- Асинхронная проверка GitHub Releases при запуске.
+- bStats Velocity с service id `33692`; библиотека shaded и relocated внутрь JAR.
 
-## Один конфиг
+## Конфигурация
 
-Весь плагин настраивается через:
+Вся настройка находится в одном файле:
 
 ```text
 plugins/pncaptcha/config.yml
 ```
 
-`0.5.0` использует `config-version: 1`. Если найден старый конфиг без этой версии, pnCaptcha сохраняет его как `config.pre-0.5.0.yml.bak` и создаёт новый полный файл. Старый `config.properties` больше не используется.
+Схема конфигурации `config-version: 2`. При переходе со старой схемы существующий файл сохраняется как:
 
-## Что настраивается
-
-- `general` — lobby, длина кода, попытки, timeout, cache.
-- `security` — IP rate-limit и лимит одновременно активных Limbo-миров.
-- `updates` — проверка нового GitHub Release при запуске, timeout запроса, уведомления консоли и игроков с permission.
-- `limbo` — view/simulation distance, авторасширение view-distance, padding чанков, свет и платформа под игроком вплоть до её размера и материала.
-- `player` — gamemode, spawn, камера, lock-position и recovery. Recovery возвращает игрока назад, если он упал ниже заданной высоты, улетел слишком далеко или поднялся слишком высоко.
-- `scene` — расстояние, высота, боковое смещение, направление размещения и полный yaw/pitch/roll всего объекта.
-- `font` — встроенный `classic-5x7` или полностью свой bitmap-шрифт из `0/1` прямо в YAML.
-- `geometry` — ширина/высота одного pixel-voxel, общая глубина, толщина front/back слоёв, расстояние между буквами, подъём каждой следующей буквы, depth-step, зеркалирование и направление extrusion.
-- `randomness` — отдельные jitter и 3D-повороты букв, случайная глубина букв, а также jitter всей сцены по позиции и углам.
-- `palette` — независимые weighted-палитры front/side/back, режимы `per-block`, `per-character`, `solid`, плюс отдельная accent-палитра с шансом появления.
-- `noise` — количество, cluster size, зона, глубина и weighted материалы помех. Stained glass можно использовать как визуально прозрачные помехи.
-- `messages` — многострочные MiniMessage-сообщения с gradient/hex/hover/click и placeholders.
-
-## Полезные настройки
-
-Массивная CAPTCHA под углом:
-
-```yaml
-scene:
-  distance-blocks: 30.0
-  center-height-blocks: 8.0
-  rotation:
-    yaw-degrees: 28.0
-    pitch-degrees: -3.0
-    roll-degrees: 2.0
-
-geometry:
-  pixel-width: 3
-  pixel-height: 3
-  depth-blocks: 5
-  front-thickness-blocks: 1
-  back-thickness-blocks: 1
-  letter-gap-blocks: 3
+```text
+plugins/pncaptcha/config.pre-1.0.0.yml.bak
 ```
 
-Автовозврат после падения:
+После этого создаётся полный актуальный конфиг со всеми комментариями и примерами.
+
+## Routing
 
 ```yaml
-player:
-  recovery:
-    enabled: true
-    below-spawn-blocks: 8.0
-    above-spawn-blocks: 40.0
-    max-horizontal-distance-blocks: 48.0
-    cooldown-millis: 500
-    preserve-current-look: false
+routing:
+  strategy: "least-players"
+  network-max-players: 0
+  network-reserve-slots: 0
+
+  servers:
+    - name: "lobby"
+      enabled: true
+      priority: 10
+      weight: 5
+      max-players: 0
+      reserve-slots: 0
 ```
 
-Небольшой разброс букв:
+Добавляй любое количество Velocity `RegisteredServer`. Сервер, достигший своего `max-players - reserve-slots`, автоматически исключается из выбора.
+
+## Actions
+
+Actions выполняются по trigger-событиям:
+
+```text
+challenge-start
+wrong-answer
+passed
+exhausted
+timeout
+recovery
+rate-limited
+busy
+network-full
+unavailable
+route-unavailable
+```
+
+Пример:
 
 ```yaml
-randomness:
-  character:
-    vertical-jitter-blocks: 1
-    depth-jitter-blocks: 1
-    depth-variation-blocks: 1
-    rotation-yaw-jitter-degrees: 2.0
-    rotation-pitch-jitter-degrees: 1.0
-    rotation-roll-jitter-degrees: 1.0
+actions:
+  enabled: true
+  triggers:
+    wrong-answer:
+      - type: "actionbar"
+        text: "<red>Неверно</red> <gray>{attempt}/{max}</gray>"
+
+      - type: "sound"
+        sound: "minecraft:block.note_block.bass"
+        volume: 0.8
+        sound-pitch: 0.7
 ```
 
-Палитра задаётся Minecraft block-id и весом. Чем выше `weight`, тем чаще выбирается материал.
+Для действий доступны placeholders `{player}`, `{uuid}`, `{ip}`, `{online}`, `{attempt}`, `{max}`, `{reason}`, `{server}` и `{captcha}`.
 
-## Сообщения
-
-`messages.*` принимает список строк MiniMessage. Например:
-
-```yaml
-messages:
-  update-available:
-    - "<gradient:#FFD166:#FF6B6B><bold>Доступно обновление pnCaptcha</bold></gradient>"
-    - "<gray>{current} <dark_gray>→ <green>{latest}</green>"
-    - "<click:open_url:'{url}'><aqua><underlined>Открыть релиз</underlined></aqua></click>"
-```
-
-Поддерживаемые placeholders зависят от события: `{attempt}`, `{max}`, `{timeout}`, `{reason}`, `{current}`, `{latest}`, `{url}`.
-
-## Проверка обновлений
-
-При запуске pnCaptcha может обратиться к `https://api.github.com/repos/<owner>/<repo>/releases/latest`. Проверка выполняется асинхронно. Если версия новее, в консоль выводится предупреждение, а игрокам с `updates.notify-permission` отправляется кликабельное сообщение.
-
-## Сборка
+## Build
 
 ```bash
 gradle clean build
@@ -120,5 +105,5 @@ gradle clean build
 Готовый shaded JAR:
 
 ```text
-build/libs/pnCaptcha-0.5.0.jar
+build/libs/pnCaptcha-1.0.0.jar
 ```
