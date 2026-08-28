@@ -1,22 +1,84 @@
-# ============================================================================
-# pnCaptcha 0.5.0 — единая публичная конфигурация
-# После изменений перезапусти Velocity. Старый config.properties не используется.
-# MiniMessage поддерживается во всех messages.* строках:
-#   <red>, <#55ddff>, <gradient:#55ddff:#8b5cf6>, <bold>, <hover:...>, <click:...>
-# ============================================================================
-config-version: 1
+# =============================================================================
+# pnCaptcha 1.0.0 — единая расширенная конфигурация
+# После изменений перезапусти Velocity.
+#
+# MiniMessage поддерживается в messages.* и текстовых actions:
+# <red>, <#55ddff>, <gradient:#55ddff:#8b5cf6>, <bold>,
+# <hover:show_text:'...'>, <click:open_url:'...'>
+#
+# В actions доступны placeholders:
+# {player}, {uuid}, {ip}, {online}, {attempt}, {max}, {reason},
+# {server}, {captcha}, а также дополнительные placeholders конкретного события.
+# =============================================================================
+config-version: 2
 
 general:
-  target-server: "lobby"
   captcha-length: 5
   max-attempts: 3
   timeout-seconds: 30
   verified-cache-minutes: 720
 
+  input:
+    case-sensitive: false
+    trim: true
+    remove-spaces: true
+    max-length: 32
+
+# =============================================================================
+# Маршрутизация после успешной CAPTCHA
+# =============================================================================
+routing:
+  # priority | least-players | random | weighted-random | round-robin | first-available
+  strategy: "least-players"
+
+  # 0 = общий лимит игроков на Velocity отключён.
+  network-max-players: 0
+  network-reserve-slots: 0
+  full-bypass-permission: "pncaptcha.full.bypass"
+
+  # Если ни один сервер ниже не подходит, можно разрешить pnCaptcha
+  # выбрать любой RegisteredServer из Velocity.
+  fallback-to-any-registered: false
+
+  # Можно добавить сколько угодно серверов.
+  # priority: меньше = выше приоритет.
+  # weight: используется только при weighted-random.
+  # max-players: 0 = без лимита pnCaptcha.
+  # reserve-slots: сколько мест оставить свободными на backend.
+  servers:
+    - name: "lobby"
+      enabled: true
+      priority: 10
+      weight: 5
+      max-players: 0
+      reserve-slots: 0
+
+    # - name: "lobby-2"
+    #   enabled: true
+    #   priority: 10
+    #   weight: 5
+    #   max-players: 150
+    #   reserve-slots: 5
+
+    # - name: "fallback"
+    #   enabled: true
+    #   priority: 100
+    #   weight: 1
+    #   max-players: 50
+    #   reserve-slots: 2
+
 security:
   max-joins-per-window: 6
   join-window-seconds: 10
   max-active-captchas: 128
+
+  # Игрок с permission полностью пропускает CAPTCHA.
+  # Пустая строка = bypass отключён.
+  bypass-permission: "pncaptcha.bypass"
+
+metrics:
+  enabled: true
+  custom-charts: true
 
 updates:
   enabled: true
@@ -29,24 +91,29 @@ updates:
   notify-permission: "pncaptcha.admin"
   announce-up-to-date: true
 
+# =============================================================================
+# Limbo
+# =============================================================================
 limbo:
-  # Базовая дальность мира Limbo.
   view-distance: 10
   simulation-distance: 8
 
-  # Если CAPTCHA ушла дальше указанной view-distance, pnCaptcha может увеличить её сам.
   auto-expand-view-distance: true
   max-auto-view-distance: 16
 
-  # Дополнительные пустые чанки вокруг реального объёма CAPTCHA.
   precreate-padding-chunks: 1
   reduced-debug-info: false
+
+  # Время мира 0..24000. 6000 = день, 18000 = ночь.
+  world-time-ticks: 6000
+
+  # recovery.enabled всегда оставляет гравитацию включённой.
+  falling-enabled: true
 
   light:
     sky: 15
     block: 15
 
-  # По умолчанию — ровно один блок под игроком.
   pedestal:
     enabled: true
     block: "minecraft:deepslate_tiles"
@@ -54,11 +121,13 @@ limbo:
     size-z: 1
     y-offset: -1
 
+# =============================================================================
+# Игрок, камера и recovery
+# =============================================================================
 player:
   # creative | adventure | survival | spectator
   game-mode: "creative"
 
-  # Жёсткая фиксация около spawn. Для настройки лучше false.
   lock-position: false
   lock-radius-blocks: 1.5
 
@@ -68,41 +137,35 @@ player:
     z: 0.5
 
   camera:
-    # true = автоматически смотреть в центр CAPTCHA.
     auto-aim: true
     yaw-degrees: 0.0
     pitch-degrees: 0.0
     yaw-offset-degrees: 0.0
     pitch-offset-degrees: 0.0
 
-  # Автовозврат, если игрок упал, улетел или поднялся слишком высоко.
   recovery:
     enabled: true
 
-    # 0 = выключить конкретный триггер.
+    # 0 = отключить конкретный триггер.
     below-spawn-blocks: 8.0
     above-spawn-blocks: 40.0
     max-horizontal-distance-blocks: 48.0
 
-    # Защита от спама телепортами при частых move-пакетах.
     cooldown-millis: 500
-
-    # true = при возврате сохранить текущий yaw/pitch игрока.
-    # false = снова смотреть точно на CAPTCHA.
     preserve-current-look: false
     send-message: true
 
+# =============================================================================
+# Положение и поворот всей CAPTCHA
+# =============================================================================
 scene:
-  # Положение центра CAPTCHA относительно игрока.
   distance-blocks: 30.0
 
-  # Куда вынести весь объект вокруг игрока:
   # 0 = +Z, 90 = -X, -90 = +X, 180 = -Z.
   forward-yaw-degrees: 0.0
   lateral-offset-blocks: 0.0
   center-height-blocks: 8.0
 
-  # Полный поворот всей 3D-конструкции.
   rotation:
     yaw-degrees: 28.0
     pitch-degrees: 0.0
@@ -112,50 +175,33 @@ font:
   # classic-5x7 | custom
   preset: "classic-5x7"
   alphabet: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-
-  # При preset: custom можно полностью нарисовать собственный шрифт.
-  # Все символы обязаны иметь одинаковую ширину и высоту.
   custom-glyphs: {}
-  # Пример:
-  # custom-glyphs:
-  #   A:
-  #     - "01110"
-  #     - "10001"
-  #     - "10001"
-  #     - "11111"
-  #     - "10001"
-  #     - "10001"
-  #     - "10001"
 
+# =============================================================================
+# Геометрия voxel-шрифта
+# =============================================================================
 geometry:
-  # Размер одного пикселя шрифта на лицевой поверхности.
   pixel-width: 2
   pixel-height: 2
-
-  # Общая реальная глубина буквы.
   depth-blocks: 3
 
-  # Сколько первых слоёв использовать front-палитру.
   front-thickness-blocks: 1
-
-  # Сколько последних слоёв использовать back-палитру.
   back-thickness-blocks: 1
 
   letter-gap-blocks: 2
-
-  # Каждая следующая буква может постепенно идти вверх/вниз и вперёд/назад.
   letter-rise-blocks: 0.0
   letter-depth-step-blocks: 0.0
 
   center-text: true
-
-  # Полезно для специальных ракурсов/шрифтов.
   mirror-horizontal: false
   mirror-vertical: false
 
-  # false = глубина идёт от игрока; true = объём вытягивается к игроку.
+  # false = глубина идёт от игрока; true = вытягивается к игроку.
   extrude-toward-camera: false
 
+# =============================================================================
+# Рандомность
+# =============================================================================
 randomness:
   enabled: true
   # random | fixed
@@ -166,11 +212,7 @@ randomness:
     horizontal-jitter-blocks: 0
     vertical-jitter-blocks: 1
     depth-jitter-blocks: 1
-
-    # Случайно добавляет 0..N блоков к толщине отдельной буквы.
     depth-variation-blocks: 0
-
-    # Отдельный небольшой 3D-поворот каждой буквы.
     rotation-yaw-jitter-degrees: 0.0
     rotation-pitch-jitter-degrees: 0.0
     rotation-roll-jitter-degrees: 0.0
@@ -184,13 +226,13 @@ randomness:
     rotation-pitch-jitter-degrees: 0.0
     rotation-roll-jitter-degrees: 0.0
 
+# =============================================================================
+# Цвет / материалы
+# =============================================================================
 palette:
-  # per-block = материал выбирается для каждого voxel-блока
-  # per-character = одна палитра на символ
-  # solid = всегда первый блок списка
+  # per-block | per-character | solid
   mode: "per-block"
 
-  # Вес больше = материал появляется чаще.
   front:
     - block: "minecraft:polished_deepslate"
       weight: 5
@@ -213,7 +255,6 @@ palette:
     - block: "minecraft:polished_blackstone"
       weight: 2
 
-  # Небольшие светящиеся/яркие вставки на передней поверхности.
   accent:
     enabled: true
     chance-percent: 8.0
@@ -223,22 +264,21 @@ palette:
       - block: "minecraft:verdant_froglight"
         weight: 1
 
+# =============================================================================
+# Помехи
+# =============================================================================
 noise:
   enabled: true
 
-  # Количество центров помех. Один центр может стать маленьким cluster.
   count: 10
   cluster-size-min: 1
   cluster-size-max: 2
 
   horizontal-padding-blocks: 4
   vertical-padding-blocks: 3
-
-  # Помехи располагаются за основной толщиной текста.
   depth-min-blocks: 3
   depth-max-blocks: 8
 
-  # Для визуальной "прозрачности" используй glass-блоки.
   materials:
     - block: "minecraft:gray_stained_glass"
       weight: 5
@@ -247,11 +287,119 @@ noise:
     - block: "minecraft:cyan_stained_glass"
       weight: 1
 
+# =============================================================================
+# ACTIONS
+#
+# trigger:
+# challenge-start, wrong-answer, passed, exhausted, timeout, recovery,
+# rate-limited, busy, network-full, unavailable, route-unavailable
+#
+# type:
+# message, actionbar, title, sound, command, disconnect, connect,
+# teleport, gamemode
+#
+# Общие поля: enabled, delay-ms, chance-percent, permission, stop-after.
+# Terminal actions connect/disconnect лучше оставлять с delay-ms: 0.
+# =============================================================================
+actions:
+  enabled: true
+
+  triggers:
+    challenge-start:
+      - type: "title"
+        title: "<gradient:#54F4D1:#4D9CFF><bold>pnCaptcha</bold></gradient>"
+        subtitle: "<gray>Введи код из блоков в чат</gray>"
+        fade-in-ms: 250
+        stay-ms: 1400
+        fade-out-ms: 350
+
+      - type: "sound"
+        sound: "minecraft:block.amethyst_block.chime"
+        source: "master"
+        volume: 0.7
+        sound-pitch: 1.15
+
+    wrong-answer:
+      - type: "actionbar"
+        text: "<red>Неверно</red> <dark_gray>• <gray>{attempt}/{max}</gray>"
+
+      - type: "sound"
+        sound: "minecraft:block.note_block.bass"
+        volume: 0.8
+        sound-pitch: 0.7
+
+    passed:
+      - type: "title"
+        title: "<green><bold>Проверка пройдена</bold></green>"
+        subtitle: "<gray>Подключение к <white>{server}</white></gray>"
+        fade-in-ms: 150
+        stay-ms: 900
+        fade-out-ms: 250
+
+      - type: "sound"
+        sound: "minecraft:entity.player.levelup"
+        volume: 0.7
+        sound-pitch: 1.2
+
+    recovery:
+      - type: "actionbar"
+        text: "<yellow>Возврат на платформу</yellow> <dark_gray>• <gray>{reason}</gray>"
+
+    exhausted:
+      - type: "sound"
+        sound: "minecraft:entity.villager.no"
+        volume: 0.8
+        sound-pitch: 0.8
+
+    timeout:
+      - type: "sound"
+        sound: "minecraft:block.beacon.deactivate"
+        volume: 0.8
+        sound-pitch: 0.8
+
+    rate-limited: []
+    busy: []
+    network-full: []
+    unavailable: []
+    route-unavailable: []
+
+    # Примеры:
+    # - type: "command"
+    #   command: "alert {player} прошёл pnCaptcha"
+    #
+    # - type: "disconnect"
+    #   lines:
+    #     - "<red>Проверка остановлена.</red>"
+    #     - "<gray>Попробуй подключиться снова.</gray>"
+    #
+    # - type: "connect"
+    #   server: "@route"
+    #
+    # - type: "teleport"
+    #   x: 0.5
+    #   y: 70.0
+    #   z: 0.5
+    #   yaw: 0.0
+    #   pitch: 0.0
+    #
+    # - type: "gamemode"
+    #   game-mode: "adventure"
+    #
+    # - type: "sound"
+    #   chance-percent: 25.0
+    #   sound: "minecraft:block.note_block.pling"
+    #
+    # - type: "message"
+    #   permission: "pncaptcha.admin"
+    #   lines:
+    #     - "<gray>Debug: CAPTCHA={captcha}</gray>"
+
+# =============================================================================
+# Сообщения стандартного lifecycle
+# =============================================================================
 messages:
   enabled: true
 
-  # Любая запись может состоять из нескольких строк.
-  # Поддерживается MiniMessage, hover и click.
   prompt:
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     - "<gradient:#54F4D1:#4D9CFF><bold>pnCaptcha</bold></gradient> <dark_gray>• <white>Проверка подключения"
@@ -260,15 +408,15 @@ messages:
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   wrong:
-    - "<red><bold>✕ Неверный код</bold></red> <dark_gray>• <gray>попытка <white>{attempt}</white>/<white>{max}</white>"
-    - "<gray>Проверь символы и отправь ответ ещё раз."
+    - "<red><bold>Неверный код</bold></red> <dark_gray>• <gray>попытка <white>{attempt}</white>/<white>{max}</white>"
+    - "<gray>Проверь символы и отправь ответ ещё раз.</gray>"
 
   passed:
-    - "<green><bold>✓ Проверка пройдена</bold></green>"
-    - "<gray>Перенаправляю тебя на сервер…"
+    - "<green><bold>Проверка пройдена</bold></green>"
+    - "<gray>Перенаправляю тебя на <white>{server}</white>…</gray>"
 
   recovered:
-    - "<yellow><bold>↺ Возврат на платформу</bold></yellow>"
+    - "<yellow><bold>Возврат на платформу</bold></yellow>"
     - "<gray>{reason}</gray>"
 
   timeout:
@@ -283,16 +431,18 @@ messages:
   rate-limited:
     - "<red>Слишком много подключений с твоего IP. Попробуй позже.</red>"
 
+  network-full:
+    - "<red>Сеть заполнена. Попробуй подключиться позже.</red>"
+
   unavailable:
     - "<red>CAPTCHA временно недоступна.</red>"
 
-  target-missing:
-    - "<red>Целевой сервер настроен неправильно.</red>"
+  route-unavailable:
+    - "<red>Сейчас нет доступного сервера для подключения.</red>"
 
-  # {current}, {latest}, {url}; строка ниже кликабельна.
   update-available:
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     - "<gradient:#FFD166:#FF6B6B><bold>Доступно обновление pnCaptcha</bold></gradient>"
     - "<gray>Установлено: <white>{current}</white> <dark_gray>→ <gray>новое: <green>{latest}</green>"
-    - "<click:open_url:'{url}'><hover:show_text:'<gray>Открыть GitHub Release'><aqua><underlined>Нажми сюда, чтобы открыть релиз</underlined></aqua></hover></click>"
+    - "<click:open_url:'{url}'><hover:show_text:'<gray>Открыть GitHub Release'><aqua><underlined>Открыть релиз</underlined></aqua></hover></click>"
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
