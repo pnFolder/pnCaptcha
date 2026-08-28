@@ -4,7 +4,9 @@ import java.time.Duration
 
 data class CaptchaConfig(
     val general: GeneralConfig = GeneralConfig(),
+    val routing: RoutingConfig = RoutingConfig(),
     val security: SecurityConfig = SecurityConfig(),
+    val metrics: MetricsConfig = MetricsConfig(),
     val updates: UpdateConfig = UpdateConfig(),
     val limbo: LimboConfig = LimboConfig(),
     val player: PlayerConfig = PlayerConfig(),
@@ -14,9 +16,9 @@ data class CaptchaConfig(
     val randomness: RandomnessConfig = RandomnessConfig(),
     val palette: PaletteConfig = PaletteConfig(),
     val noise: NoiseConfig = NoiseConfig(),
+    val actions: ActionsConfig = ActionsConfig(),
     val messages: MessageConfig = MessageConfig()
 ) {
-    val targetServer: String get() = general.targetServer
     val captchaLength: Int get() = general.captchaLength
     val maxAttempts: Int get() = general.maxAttempts
     val timeout: Duration get() = Duration.ofSeconds(general.timeoutSeconds)
@@ -26,11 +28,30 @@ data class CaptchaConfig(
     val maxActiveCaptchas: Int get() = security.maxActiveCaptchas
 
     init {
-        require(general.targetServer.isNotBlank())
         require(general.captchaLength in 3..12)
-        require(general.maxAttempts in 1..10)
-        require(general.timeoutSeconds in 5L..300L)
+        require(general.maxAttempts in 1..20)
+        require(general.timeoutSeconds in 5L..600L)
         require(general.verifiedCacheMinutes in 1L..43_200L)
+        require(general.input.maxLength in 3..256)
+
+        require(routing.strategy.lowercase() in setOf(
+            "priority", "least-players", "random", "weighted-random", "round-robin", "first-available"
+        ))
+        require(routing.networkMaxPlayers >= 0)
+        require(routing.networkReserveSlots >= 0)
+        require(routing.networkMaxPlayers == 0 || routing.networkReserveSlots < routing.networkMaxPlayers)
+        require(routing.servers.isNotEmpty()) { "routing.servers must contain at least one server" }
+        require(routing.servers.map { it.name.lowercase() }.distinct().size == routing.servers.size) {
+            "routing.servers names must be unique"
+        }
+        routing.servers.forEach { server ->
+            require(server.name.isNotBlank())
+            require(server.priority in -100_000..100_000)
+            require(server.weight in 1..100_000)
+            require(server.maxPlayers >= 0)
+            require(server.reserveSlots >= 0)
+            require(server.maxPlayers == 0 || server.reserveSlots < server.maxPlayers)
+        }
 
         require(security.maxJoinsPerWindow in 1..10_000)
         require(security.joinWindowSeconds in 1L..3600L)
@@ -48,6 +69,7 @@ data class CaptchaConfig(
         require(limbo.precreatePaddingChunks in 0..8)
         require(limbo.skyLightLevel in 0..15)
         require(limbo.blockLightLevel in 0..15)
+        require(limbo.worldTimeTicks in 0L..24_000L)
         require(limbo.pedestal.sizeX in 1..16)
         require(limbo.pedestal.sizeZ in 1..16)
         require(limbo.pedestal.block.isNotBlank())
@@ -110,21 +132,66 @@ data class CaptchaConfig(
         require(noise.clusterSizeMin in 1..32)
         require(noise.clusterSizeMax in noise.clusterSizeMin..64)
         if (noise.enabled) require(noise.materials.isNotEmpty())
+
+        actions.triggers.forEach { (trigger, entries) ->
+            require(trigger.isNotBlank())
+            entries.forEach { action ->
+                require(action.type.lowercase() in setOf(
+                    "message", "actionbar", "title", "sound", "command", "disconnect", "connect",
+                    "teleport", "gamemode"
+                )) { "Unsupported action type '${action.type}' in trigger '$trigger'" }
+                require(action.delayMillis in 0L..300_000L)
+                require(action.chancePercent in 0.0..100.0)
+                require(action.volume in 0.0f..16.0f)
+                require(action.soundPitch in 0.0f..2.0f)
+            }
+        }
     }
 }
 
 data class GeneralConfig(
-    val targetServer: String = "lobby",
     val captchaLength: Int = 5,
     val maxAttempts: Int = 3,
     val timeoutSeconds: Long = 30,
-    val verifiedCacheMinutes: Long = 720
+    val verifiedCacheMinutes: Long = 720,
+    val input: InputConfig = InputConfig()
+)
+
+data class InputConfig(
+    val caseSensitive: Boolean = false,
+    val trim: Boolean = true,
+    val removeSpaces: Boolean = true,
+    val maxLength: Int = 32
+)
+
+data class RoutingConfig(
+    val strategy: String = "least-players",
+    val networkMaxPlayers: Int = 0,
+    val networkReserveSlots: Int = 0,
+    val fullBypassPermission: String = "pncaptcha.full.bypass",
+    val fallbackToAnyRegistered: Boolean = false,
+    val servers: List<RouteServerConfig> = listOf(RouteServerConfig("lobby"))
+)
+
+data class RouteServerConfig(
+    val name: String,
+    val enabled: Boolean = true,
+    val priority: Int = 100,
+    val weight: Int = 1,
+    val maxPlayers: Int = 0,
+    val reserveSlots: Int = 0
 )
 
 data class SecurityConfig(
     val maxJoinsPerWindow: Int = 6,
     val joinWindowSeconds: Long = 10,
-    val maxActiveCaptchas: Int = 128
+    val maxActiveCaptchas: Int = 128,
+    val bypassPermission: String = "pncaptcha.bypass"
+)
+
+data class MetricsConfig(
+    val enabled: Boolean = true,
+    val customCharts: Boolean = true
 )
 
 data class UpdateConfig(
@@ -148,6 +215,8 @@ data class LimboConfig(
     val reducedDebugInfo: Boolean = false,
     val skyLightLevel: Int = 15,
     val blockLightLevel: Int = 15,
+    val worldTimeTicks: Long = 6000,
+    val fallingEnabled: Boolean = true,
     val pedestal: PedestalConfig = PedestalConfig()
 )
 
@@ -319,6 +388,39 @@ data class NoiseConfig(
     )
 )
 
+data class ActionsConfig(
+    val enabled: Boolean = true,
+    val triggers: Map<String, List<ActionDefinition>> = emptyMap()
+)
+
+data class ActionDefinition(
+    val enabled: Boolean = true,
+    val type: String = "message",
+    val delayMillis: Long = 0,
+    val chancePercent: Double = 100.0,
+    val permission: String = "",
+    val stopAfter: Boolean = false,
+    val text: String = "",
+    val lines: List<String> = emptyList(),
+    val command: String = "",
+    val server: String = "",
+    val x: Double? = null,
+    val y: Double? = null,
+    val z: Double? = null,
+    val teleportYaw: Float? = null,
+    val teleportPitch: Float? = null,
+    val title: String = "",
+    val subtitle: String = "",
+    val fadeInMillis: Long = 250,
+    val stayMillis: Long = 1500,
+    val fadeOutMillis: Long = 250,
+    val sound: String = "minecraft:block.note_block.pling",
+    val source: String = "master",
+    val volume: Float = 1.0f,
+    val soundPitch: Float = 1.0f,
+    val gameMode: String = "adventure"
+)
+
 data class MessageConfig(
     val enabled: Boolean = true,
     val prompt: List<String> = listOf(
@@ -334,7 +436,7 @@ data class MessageConfig(
     ),
     val passed: List<String> = listOf(
         "<green><bold>✓ Проверка пройдена</bold></green>",
-        "<gray>Перенаправляю тебя на сервер…"
+        "<gray>Перенаправляю тебя на <white>{server}</white>…"
     ),
     val recovered: List<String> = listOf(
         "<yellow><bold>↺ Возврат на платформу</bold></yellow> <dark_gray>• <gray>{reason}"
@@ -343,8 +445,9 @@ data class MessageConfig(
     val tooManyAttempts: List<String> = listOf("<red><bold>Слишком много неверных попыток.</bold></red>"),
     val busy: List<String> = listOf("<red>Сервис CAPTCHA сейчас перегружен. Попробуй чуть позже.</red>"),
     val rateLimited: List<String> = listOf("<red>Слишком много подключений с твоего IP. Попробуй позже.</red>"),
+    val networkFull: List<String> = listOf("<red>Сеть заполнена. Попробуй подключиться позже.</red>"),
     val unavailable: List<String> = listOf("<red>CAPTCHA временно недоступна.</red>"),
-    val targetMissing: List<String> = listOf("<red>Целевой сервер настроен неправильно.</red>"),
+    val routeUnavailable: List<String> = listOf("<red>Сейчас нет доступного сервера для подключения.</red>"),
     val updateAvailable: List<String> = listOf(
         "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "<gradient:#FFD166:#FF6B6B><bold>Доступно обновление pnCaptcha</bold></gradient>",
