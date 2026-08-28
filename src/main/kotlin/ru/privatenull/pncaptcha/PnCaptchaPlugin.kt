@@ -12,15 +12,19 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
 import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
+import org.bstats.charts.SimplePie
 import org.bstats.velocity.Metrics
 import org.slf4j.Logger
+import ru.privatenull.pncaptcha.action.ActionService
 import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaFont
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
+import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.manager.CaptchaManager
 import ru.privatenull.pncaptcha.message.MessageService
+import ru.privatenull.pncaptcha.routing.ServerRouter
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
 import ru.privatenull.pncaptcha.update.UpdateChecker
@@ -31,7 +35,7 @@ import java.nio.file.Path
     id = "pncaptcha",
     name = "pnCaptcha",
     version = PnCaptchaPlugin.VERSION,
-    description = "Fully configurable LimboAPI 3D voxel CAPTCHA for Velocity",
+    description = "Fully configurable LimboAPI 3D voxel CAPTCHA and smart routing for Velocity",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
     dependencies = [Dependency(id = "limboapi")]
@@ -52,14 +56,14 @@ class PnCaptchaPlugin @Inject constructor(
         val config = CaptchaConfigLoader.load(dataDirectory)
         Files.deleteIfExists(dataDirectory.resolve("config.properties"))
 
-        // bStats is intentionally initialized once per proxy lifecycle. Server owners
-        // can opt out globally through plugins/bStats/config.txt.
-        metrics = metricsFactory.make(this, BSTATS_SERVICE_ID)
+        setupMetrics(config)
 
         val font = CaptchaFont.resolve(config.font)
         val factory = resolveLimboFactory()
         val limboEnvironment = CaptchaLimboEnvironment(factory, config)
         val messageService = MessageService(config)
+        val serverRouter = ServerRouter(proxy, config.routing)
+        val actionService = ActionService(this, proxy, logger, config, messageService, serverRouter)
         val sessionManager = CaptchaSessionManager()
         val verificationCache = VerificationCache(config.verifiedCacheTtl)
         val rateLimiter = IpJoinRateLimiter(config.maxJoinsPerWindow, config.joinWindow)
@@ -75,13 +79,21 @@ class PnCaptchaPlugin @Inject constructor(
             sessions = sessionManager,
             cache = verificationCache,
             rateLimiter = rateLimiter,
-            messages = messageService
+            messages = messageService,
+            router = serverRouter,
+            actions = actionService
         )
 
         updateChecker = UpdateChecker(this, proxy, logger, config, VERSION, messageService).also { it.start() }
 
         logger.info("pnCaptcha {} initialized. Config: plugins/pncaptcha/config.yml", VERSION)
-        logger.info("bStats metrics enabled with service id {} (subject to the server owner's global bStats opt-out).", BSTATS_SERVICE_ID)
+        logger.info(
+            "Routing: strategy={}, configured servers={}, network max={}, reserve={}",
+            config.routing.strategy,
+            serverRouter.configuredServerCount(),
+            config.routing.networkMaxPlayers,
+            config.routing.networkReserveSlots
+        )
         logger.info(
             "3D: distance={}, yaw/pitch/roll={}/{}/{}, voxel={}x{}x{}, front/back={}/{}, font={} {}x{}, Limbo view/sim={}/{}",
             config.scene.distanceBlocks,
@@ -98,6 +110,31 @@ class PnCaptchaPlugin @Inject constructor(
             font.height,
             config.limbo.viewDistance,
             config.limbo.simulationDistance
+        )
+    }
+
+    private fun setupMetrics(config: CaptchaConfig) {
+        if (!config.metrics.enabled) {
+            logger.info("bStats metrics disabled by plugins/pncaptcha/config.yml")
+            return
+        }
+
+        metrics = metricsFactory.make(this, BSTATS_SERVICE_ID).also { metrics ->
+            if (config.metrics.customCharts) {
+                metrics.addCustomChart(SimplePie("routing_strategy") { config.routing.strategy.lowercase() })
+                metrics.addCustomChart(SimplePie("routing_servers") { config.routing.servers.count { it.enabled }.toString() })
+                metrics.addCustomChart(SimplePie("captcha_length") { config.captchaLength.toString() })
+                metrics.addCustomChart(SimplePie("font_preset") { config.font.preset.lowercase() })
+                metrics.addCustomChart(SimplePie("voxel_depth") { config.geometry.depthBlocks.toString() })
+                metrics.addCustomChart(SimplePie("noise_enabled") { config.noise.enabled.toString() })
+                metrics.addCustomChart(SimplePie("recovery_enabled") { config.player.recovery.enabled.toString() })
+                metrics.addCustomChart(SimplePie("actions_enabled") { config.actions.enabled.toString() })
+            }
+        }
+
+        logger.info(
+            "bStats metrics enabled with service id {} (subject to the server owner's global bStats opt-out).",
+            BSTATS_SERVICE_ID
         )
     }
 
@@ -137,7 +174,7 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "0.5.0"
+        const val VERSION = "1.0.0"
         const val BSTATS_SERVICE_ID = 33692
     }
 }
