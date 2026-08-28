@@ -1,13 +1,20 @@
 name: release
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: pncaptcha-release
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: contains(github.event.head_commit.message, 'release: pnCaptcha 1.0.0')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +25,114 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.7.0'
+
       - name: Build and test
         run: gradle clean build --stacktrace
+
       - name: Verify release jar
         run: |
-          test -f build/libs/pnCaptcha-0.5.0.jar
-          jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'velocity-plugin.json'
-          jar tf build/libs/pnCaptcha-0.5.0.jar | grep -q 'config.yml'
+          JAR="build/libs/pnCaptcha-1.0.0.jar"
+          test -f "$JAR"
+          jar tf "$JAR" | grep -q 'velocity-plugin.json'
+          jar tf "$JAR" | grep -q 'config.yml'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/routing/ServerRouter.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/ActionService.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class'
+          if jar tf "$JAR" | grep -q '^org/bstats/'; then
+            echo 'bStats was not relocated correctly'
+            exit 1
+          fi
+
+      - name: Remove previous releases and version tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r tag; do
+            if [ -n "$tag" ]; then
+              echo "Deleting previous release $tag"
+              gh release delete "$tag" --cleanup-tag -y || true
+            fi
+          done
+
+          gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" --paginate --jq '.[].ref' | while read -r ref; do
+            tag="${ref#refs/tags/}"
+            if [ -n "$tag" ]; then
+              echo "Deleting previous version tag $tag"
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" || true
+            fi
+          done
+
       - name: Publish
-        run: echo 'Use this workflow intentionally for the next public pnCaptcha release.'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-notes.md <<'EOF'
+          # 3D CAPTCHA и умная маршрутизация
+
+          pnCaptcha изолирует непроверенные подключения в лёгком Limbo и гибко распределяет прошедших проверку игроков между backend-серверами.
+
+          ## Новое
+          - Добавлена персональная 3D voxel CAPTCHA внутри LimboAPI VirtualWorld без использования Paper-сервера для проверки.
+          - Добавлена генерация CAPTCHA реальными виртуальными блоками до входа игрока в Limbo.
+          - Добавлена настройка расстояния, высоты, бокового смещения и полного поворота CAPTCHA по yaw, pitch и roll.
+          - Добавлена настройка ширины и высоты voxel-пикселя, глубины символов, front/back-слоёв и расстояния между буквами.
+          - Добавлена настройка постепенного подъёма и смещения каждой следующей буквы в глубину.
+          - Добавлено горизонтальное и вертикальное зеркалирование символов и выбор направления extrusion.
+          - Добавлен встроенный читаемый bitmap-шрифт и возможность полностью описать собственный шрифт через матрицы 0/1.
+          - Добавлен настраиваемый алфавит генератора CAPTCHA.
+          - Добавлены отдельные weighted-палитры материалов для front, side и back частей символов.
+          - Добавлена accent-палитра с настраиваемой вероятностью появления выделяющихся блоков.
+          - Добавлены настраиваемые кластеры визуальных помех с отдельной глубиной, размером, зоной и материалами.
+          - Добавлена рандомизация положения, глубины и индивидуальных углов символов.
+          - Добавлена рандомизация дистанции, высоты, бокового положения и углов всей сцены.
+          - Добавлен фиксированный seed для повторяемых сцен и отладки.
+          - Добавлен автоматический расчёт необходимой view distance для большой CAPTCHA.
+          - Добавлена настройка времени мира, освещения, simulation distance и дополнительных загружаемых чанков Limbo.
+          - Добавлена полностью настраиваемая платформа под игроком с размером, материалом и высотой.
+          - Добавлен recovery после падения, слишком большого подъёма и выхода за допустимый горизонтальный радиус.
+          - Добавлена настройка cooldown возврата и сохранения направления взгляда после recovery.
+          - Добавлена настройка game mode, spawn и автоматического либо ручного направления камеры.
+          - Добавлена нормализация ответа с настройкой регистра, пробелов, trim и максимальной длины ввода.
+          - Добавлена маршрутизация на любое количество Velocity backend-серверов после успешной проверки.
+          - Добавлены стратегии priority, least-players, random, weighted-random, round-robin и first-available.
+          - Добавлены отдельные лимиты онлайна и резервные слоты для каждого backend-сервера.
+          - Добавлен общий лимит онлайна сети с резервными слотами и permission для обхода лимита.
+          - Добавлен fallback на любой зарегистрированный Velocity-сервер, если настроенные маршруты недоступны.
+          - Добавлена система Actions для событий challenge-start, wrong-answer, passed, exhausted, timeout, recovery, rate-limited, busy, network-full, unavailable и route-unavailable.
+          - Добавлены Actions типов message, actionbar, title, sound, command, disconnect, connect, teleport и gamemode.
+          - Добавлены задержка, вероятность выполнения, permission и остановка цепочки для каждого Action.
+          - Добавлены placeholders игрока, UUID, IP, онлайна, попыток, причины, выбранного сервера и CAPTCHA для Actions.
+          - Добавлены многострочные MiniMessage-сообщения с HEX-цветами, gradients, hover и click.
+          - Добавлена проверка новых GitHub Releases при запуске и кликабельное уведомление администраторам.
+          - Добавлен IP rate-limit для всплесков подключений.
+          - Добавлен TTL cache проверенных UUID/IP для повторных входов без лишней CAPTCHA.
+          - Добавлен permission для полного обхода CAPTCHA.
+          - Добавлен лимит одновременно активных CAPTCHA-миров для защиты памяти.
+          - Добавлена интеграция bStats для Velocity с агрегированными custom charts основных настроек плагина.
+
+          ## Улучшено
+          - Улучшена надёжность отображения CAPTCHA за счёт хранения блоков непосредственно в Limbo VirtualWorld вместо временных client-only block packets.
+          - Улучшена совместимость с Velocity за счёт полного отказа pnCaptcha от PacketEvents.
+          - Улучшена читаемость CAPTCHA за счёт настоящей 3D-глубины, бокового ракурса и независимых материалов граней.
+          - Улучшена работа больших сцен за счёт предварительного создания необходимых чанков и автоматического расширения view distance.
+          - Улучшена конфигурация: все параметры, сообщения, Actions, routing, security, metrics и визуальная часть находятся в одном YAML-файле с комментариями.
+          - Улучшена изоляция зависимостей: bStats встраивается в JAR и переносится в собственный namespace pnCaptcha.
+          - Улучшена диагностика запуска: логируются параметры 3D-сцены, Limbo и выбранная стратегия маршрутизации.
+
+          ## Исправлено
+          - Исправлено зеркальное отображение символов при просмотре CAPTCHA со стороны игрока.
+          - Исправлено исчезновение CAPTCHA при большой дистанции из-за гонки между block update и загрузкой chunk packets.
+          - Исправлена лишняя большая платформа: стандартная сцена использует один настраиваемый блок под игроком.
+          - Исправлен recovery после падения: при включённом возврате используется реальная гравитация вместо принудительного состояния полёта.
+          - Исправлена очистка персонального Limbo после успешной проверки, ошибки, таймаута и отключения игрока.
+          - Исправлена проверка сборки bStats: CI контролирует наличие relocated-классов и отсутствие исходного org/bstats namespace.
+
+          ## Важно
+          > Старый конфиг несовместим с новой полной схемой: pnCaptcha автоматически сохранит его резервную копию и создаст актуальный config.yml. Для работы требуются Java 21+, Velocity 3.5.x и LimboAPI 1.1.26+.
+          EOF
+
+          gh release create v1.0.0 \
+            build/libs/pnCaptcha-1.0.0.jar \
+            --target "$GITHUB_SHA" \
+            --title 'pnCaptcha — 3D CAPTCHA и умная маршрутизация' \
+            --notes-file release-notes.md
