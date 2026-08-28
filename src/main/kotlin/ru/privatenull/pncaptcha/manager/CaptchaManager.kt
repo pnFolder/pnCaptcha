@@ -6,12 +6,14 @@ import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import net.elytrium.limboapi.api.player.LimboPlayer
 import org.slf4j.Logger
+import ru.privatenull.pncaptcha.action.ActionService
 import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
 import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.limbo.CaptchaSessionHandler
 import ru.privatenull.pncaptcha.message.MessageService
+import ru.privatenull.pncaptcha.routing.ServerRouter
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSession
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
@@ -31,22 +33,42 @@ class CaptchaManager(
     private val sessions: CaptchaSessionManager,
     private val cache: VerificationCache,
     private val rateLimiter: IpJoinRateLimiter,
-    private val messages: MessageService
+    private val messages: MessageService,
+    private val router: ServerRouter,
+    private val actions: ActionService
 ) {
     private val timeoutTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val lastRecoveryAt = ConcurrentHashMap<UUID, Long>()
 
     fun register(event: LoginLimboRegisterEvent) {
         val player = event.player
+
+        if (config.security.bypassPermission.isNotBlank() && player.hasPermission(config.security.bypassPermission)) {
+            return
+        }
         if (cache.isVerified(player)) return
 
+        if (router.networkIsFull(player)) {
+            event.addOnJoinCallback(Runnable {
+                val terminal = actions.fire("network-full", ActionService.Context(player = player))
+                if (!terminal) player.disconnect(messages.component(config.messages.networkFull))
+            })
+            return
+        }
+
         if (!rateLimiter.allow(player.remoteAddress.address)) {
-            event.addOnJoinCallback(Runnable { player.disconnect(messages.component(config.messages.rateLimited)) })
+            event.addOnJoinCallback(Runnable {
+                val terminal = actions.fire("rate-limited", ActionService.Context(player = player))
+                if (!terminal) player.disconnect(messages.component(config.messages.rateLimited))
+            })
             return
         }
 
         if (environment.activeCount() >= config.maxActiveCaptchas) {
-            event.addOnJoinCallback(Runnable { player.disconnect(messages.component(config.messages.busy)) })
+            event.addOnJoinCallback(Runnable {
+                val terminal = actions.fire("busy", ActionService.Context(player = player))
+                if (!terminal) player.disconnect(messages.component(config.messages.busy))
+            })
             return
         }
 
@@ -82,7 +104,11 @@ class CaptchaManager(
             sessions.remove(player.uniqueId, session.id)
             environment.dispose(session.id)
             logger.error("Failed to build/spawn CAPTCHA Limbo for {}", player.username, throwable)
-            player.disconnect(messages.component(config.messages.unavailable))
+            val terminal = actions.fire(
+                "unavailable",
+                ActionService.Context(player = player, sessionId = session.id, captcha = session.answer)
+            )
+            if (!terminal) player.disconnect(messages.component(config.messages.unavailable))
             return
         }
 
@@ -98,12 +124,9 @@ class CaptchaManager(
 
         limboPlayer.setGameMode(environment.gameMode)
         limboPlayer.sendAbilities()
+        limboPlayer.setWorldTime(config.limbo.worldTimeTicks)
 
-        // LimboAPI's disableFalling() forcibly puts the client into a flying
-        // state. Recovery is intended to catch a real fall, so gravity must be
-        // enabled whenever recovery is enabled. If recovery is disabled we keep
-        // the old floating behaviour for servers that want a fixed void scene.
-        if (config.player.recovery.enabled) {
+        if (config.player.recovery.enabled || config.limbo.fallingEnabled) {
             limboPlayer.enableFalling()
         } else {
             limboPlayer.disableFalling()
@@ -119,11 +142,16 @@ class CaptchaManager(
         }
 
         if (becameWaiting) {
-            messages.send(
-                limboPlayer.proxyPlayer,
-                config.messages.prompt,
-                mapOf("max" to config.maxAttempts, "timeout" to config.general.timeoutSeconds)
+            val placeholders = mapOf(
+                "max" to config.maxAttempts,
+                "timeout" to config.general.timeoutSeconds
             )
+            messages.send(limboPlayer.proxyPlayer, config.messages.prompt, placeholders)
+            val terminal = actions.fire(
+                "challenge-start",
+                context(session, limboPlayer, placeholders = placeholders)
+            )
+            if (terminal) cleanup(session, delayedDispose = true)
         }
     }
 
@@ -136,7 +164,7 @@ class CaptchaManager(
         var exhausted = false
         synchronized(session) {
             if (session.state != VerificationState.CAPTCHA_WAITING) return
-            if (session.matches(input)) {
+            if (matches(session.answer, input)) {
                 session.state = VerificationState.VERIFIED
                 passed = true
             } else {
@@ -152,36 +180,56 @@ class CaptchaManager(
             complete(session, proxyPlayer, limboPlayer)
             return
         }
+
         if (exhausted) {
-            proxyPlayer.disconnect(messages.component(config.messages.tooManyAttempts))
+            val actionContext = context(session, limboPlayer)
+            val terminal = actions.fire("exhausted", actionContext)
+            if (!terminal) {
+                proxyPlayer.disconnect(messages.component(config.messages.tooManyAttempts))
+            }
             cleanup(session, delayedDispose = true)
             return
         }
 
-        messages.send(
-            proxyPlayer,
-            config.messages.wrong,
-            mapOf("attempt" to session.attempts, "max" to config.maxAttempts)
+        val placeholders = mapOf("attempt" to session.attempts, "max" to config.maxAttempts)
+        messages.send(proxyPlayer, config.messages.wrong, placeholders)
+        val terminal = actions.fire(
+            "wrong-answer",
+            context(session, limboPlayer, placeholders = placeholders)
         )
+        if (terminal) cleanup(session, delayedDispose = true)
     }
 
     private fun complete(session: CaptchaSession, proxyPlayer: Player, limboPlayer: LimboPlayer) {
-        cache.markVerified(proxyPlayer)
-        val target = proxy.getServer(config.targetServer)
-        if (target.isEmpty) {
-            logger.error("Configured target server '{}' does not exist", config.targetServer)
-            proxyPlayer.disconnect(messages.component(config.messages.targetMissing))
+        val target = router.select()
+        if (target == null) {
+            logger.error("No configured routing server is available")
+            val terminal = actions.fire("route-unavailable", context(session, limboPlayer))
+            if (!terminal) {
+                proxyPlayer.disconnect(messages.component(config.messages.routeUnavailable))
+            }
             cleanup(session, delayedDispose = true)
             return
         }
 
+        val serverName = target.serverInfo.name
+        val placeholders = mapOf("server" to serverName)
+        messages.send(proxyPlayer, config.messages.passed, placeholders)
+
+        val terminal = actions.fire(
+            "passed",
+            context(session, limboPlayer, server = serverName, placeholders = placeholders)
+        )
+
+        cache.markVerified(proxyPlayer)
         sessions.remove(session.playerId, session.id)
         timeoutTasks.remove(session.playerId)?.cancel()
         lastRecoveryAt.remove(session.playerId)
         session.limboPlayer = null
 
-        messages.send(proxyPlayer, config.messages.passed)
-        limboPlayer.disconnect(target.get())
+        if (!terminal) {
+            limboPlayer.disconnect(target)
+        }
         scheduleDispose(session.id)
     }
 
@@ -222,9 +270,15 @@ class CaptchaManager(
         lastRecoveryAt[playerId] = now
 
         teleportToCamera(sessionId, limboPlayer, yaw, pitch)
+        val placeholders = mapOf("reason" to reason)
         if (config.player.recovery.sendMessage) {
-            messages.send(limboPlayer.proxyPlayer, config.messages.recovered, mapOf("reason" to reason))
+            messages.send(limboPlayer.proxyPlayer, config.messages.recovered, placeholders)
         }
+        val terminal = actions.fire(
+            "recovery",
+            context(session, limboPlayer, reason = reason, placeholders = placeholders)
+        )
+        if (terminal) cleanup(session, delayedDispose = true)
     }
 
     fun onDisconnect(playerId: UUID, sessionId: UUID) {
@@ -254,9 +308,45 @@ class CaptchaManager(
         }
         if (!shouldKick) return
 
-        session.limboPlayer?.proxyPlayer?.disconnect(messages.component(config.messages.timeout))
+        val limboPlayer = session.limboPlayer
+        val proxyPlayer = limboPlayer?.proxyPlayer
+        if (proxyPlayer != null) {
+            val terminal = actions.fire("timeout", context(session, limboPlayer))
+            if (!terminal) proxyPlayer.disconnect(messages.component(config.messages.timeout))
+        }
         cleanup(session, delayedDispose = true)
     }
+
+    private fun matches(expected: String, rawInput: String): Boolean {
+        if (rawInput.length > config.general.input.maxLength) return false
+        return normalize(expected) == normalize(rawInput)
+    }
+
+    private fun normalize(value: String): String {
+        var result = value
+        if (config.general.input.trim) result = result.trim()
+        if (config.general.input.removeSpaces) result = result.filterNot(Char::isWhitespace)
+        if (!config.general.input.caseSensitive) result = result.uppercase()
+        return result
+    }
+
+    private fun context(
+        session: CaptchaSession,
+        limboPlayer: LimboPlayer,
+        reason: String? = null,
+        server: String? = null,
+        placeholders: Map<String, Any?> = emptyMap()
+    ): ActionService.Context = ActionService.Context(
+        player = limboPlayer.proxyPlayer,
+        limboPlayer = limboPlayer,
+        sessionId = session.id,
+        captcha = session.answer,
+        attempt = session.attempts,
+        maxAttempts = config.maxAttempts,
+        reason = reason,
+        server = server,
+        placeholders = placeholders
+    )
 
     private fun cleanup(session: CaptchaSession, delayedDispose: Boolean) {
         sessions.remove(session.playerId, session.id)
