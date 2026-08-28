@@ -24,6 +24,8 @@ class ActionService(
     private val messages: MessageService,
     private val router: ServerRouter
 ) {
+    private val bossBars = BossBarService(plugin, proxy, messages)
+
     fun fire(trigger: String, context: Context): Boolean {
         if (!config.actions.enabled) return false
         val actions = config.actions.triggers[trigger.lowercase()].orEmpty()
@@ -47,11 +49,18 @@ class ActionService(
                     .getOrDefault(false) || terminal
             }
 
-            if (action.stopAfter) break
-            if (terminal) break
+            if (action.stopAfter || terminal) break
         }
 
         return terminal
+    }
+
+    fun cleanup(playerId: UUID) {
+        bossBars.cleanup(playerId)
+    }
+
+    fun shutdown() {
+        bossBars.shutdown()
     }
 
     private fun execute(action: ActionDefinition, context: Context): Boolean {
@@ -60,24 +69,23 @@ class ActionService(
         return when (action.type.lowercase()) {
             "message" -> {
                 val lines = if (action.lines.isNotEmpty()) action.lines else listOf(action.text)
-                messages.send(context.player, lines.filter(String::isNotEmpty), placeholders)
+                val filtered = lines.filter(String::isNotEmpty)
+                if (filtered.isNotEmpty()) context.player.sendMessage(messages.render(filtered, placeholders))
                 false
             }
 
             "actionbar" -> {
                 if (action.text.isNotBlank()) {
-                    context.player.sendActionBar(messages.component(listOf(action.text), placeholders))
+                    context.player.sendActionBar(messages.render(listOf(action.text), placeholders))
                 }
                 false
             }
 
             "title" -> {
-                val title = messages.component(listOf(action.title), placeholders)
-                val subtitle = messages.component(listOf(action.subtitle), placeholders)
                 context.player.showTitle(
                     Title.title(
-                        title,
-                        subtitle,
+                        messages.render(listOf(action.title), placeholders),
+                        messages.render(listOf(action.subtitle), placeholders),
                         Title.Times.times(
                             Duration.ofMillis(action.fadeInMillis.coerceAtLeast(0)),
                             Duration.ofMillis(action.stayMillis.coerceAtLeast(0)),
@@ -112,7 +120,7 @@ class ActionService(
 
             "disconnect" -> {
                 val lines = if (action.lines.isNotEmpty()) action.lines else listOf(action.text)
-                context.player.disconnect(messages.component(lines.filter(String::isNotEmpty), placeholders))
+                context.player.disconnect(messages.render(lines.filter(String::isNotEmpty), placeholders))
                 true
             }
 
@@ -155,6 +163,11 @@ class ActionService(
                 false
             }
 
+            "bossbar" -> {
+                bossBars.execute(action, context.player, placeholders)
+                false
+            }
+
             else -> false
         }
     }
@@ -166,6 +179,8 @@ class ActionService(
         put("online", proxy.playerCount)
         put("attempt", context.attempt)
         put("max", context.maxAttempts)
+        put("remaining", (context.maxAttempts - context.attempt).coerceAtLeast(0))
+        put("timeout", config.general.timeoutSeconds)
         put("reason", context.reason)
         put("server", context.server)
         put("captcha", context.captcha)

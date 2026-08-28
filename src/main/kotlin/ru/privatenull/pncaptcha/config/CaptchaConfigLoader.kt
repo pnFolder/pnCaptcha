@@ -7,7 +7,7 @@ import java.nio.file.StandardCopyOption
 
 object CaptchaConfigLoader {
     private const val FILE_NAME = "config.yml"
-    private const val CONFIG_VERSION = 2
+    private const val CONFIG_VERSION = 3
 
     fun load(dataDirectory: Path): CaptchaConfig {
         Files.createDirectories(dataDirectory)
@@ -18,7 +18,7 @@ object CaptchaConfigLoader {
         } else {
             val existing = readRoot(path)
             if (existing.int("config-version", 0) != CONFIG_VERSION) {
-                val backup = dataDirectory.resolve("config.pre-1.0.0.yml.bak")
+                val backup = dataDirectory.resolve("config.pre-1.1.0.yml.bak")
                 Files.copy(path, backup, StandardCopyOption.REPLACE_EXISTING)
                 copyDefault(path)
             }
@@ -108,10 +108,7 @@ object CaptchaConfigLoader {
                     enabled = root.bool("player.recovery.enabled", defaults.player.recovery.enabled),
                     belowSpawnBlocks = root.double("player.recovery.below-spawn-blocks", defaults.player.recovery.belowSpawnBlocks),
                     aboveSpawnBlocks = root.double("player.recovery.above-spawn-blocks", defaults.player.recovery.aboveSpawnBlocks),
-                    maxHorizontalDistanceBlocks = root.double(
-                        "player.recovery.max-horizontal-distance-blocks",
-                        defaults.player.recovery.maxHorizontalDistanceBlocks
-                    ),
+                    maxHorizontalDistanceBlocks = root.double("player.recovery.max-horizontal-distance-blocks", defaults.player.recovery.maxHorizontalDistanceBlocks),
                     cooldownMillis = root.long("player.recovery.cooldown-millis", defaults.player.recovery.cooldownMillis),
                     preserveCurrentLook = root.bool("player.recovery.preserve-current-look", defaults.player.recovery.preserveCurrentLook),
                     sendMessage = root.bool("player.recovery.send-message", defaults.player.recovery.sendMessage)
@@ -331,7 +328,19 @@ object CaptchaConfigLoader {
                     source = map["source"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "master" },
                     volume = map.doubleValue("volume", 1.0).toFloat(),
                     soundPitch = map.doubleValue("sound-pitch", 1.0).toFloat(),
-                    gameMode = map["game-mode"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "adventure" }
+                    gameMode = map["game-mode"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "adventure" },
+                    bossBarId = map["bossbar-id"]?.toString()?.trim().orEmpty().ifEmpty { "captcha" },
+                    bossBarOperation = map["bossbar-operation"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "show" },
+                    bossBarColor = map["bossbar-color"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "blue" },
+                    bossBarOverlay = map["bossbar-overlay"]?.toString()?.trim()?.lowercase().orEmpty().ifEmpty { "progress" },
+                    bossBarProgress = map.nullableDouble("bossbar-progress"),
+                    bossBarProgressDelta = map.doubleValue("bossbar-progress-delta", 0.0),
+                    bossBarStartProgress = map.nullableDouble("bossbar-start-progress"),
+                    bossBarEndProgress = map.nullableDouble("bossbar-end-progress"),
+                    bossBarDurationMillis = map.longValue("bossbar-duration-ms", 0L),
+                    bossBarUpdateIntervalMillis = map.longValue("bossbar-update-interval-ms", 100L),
+                    bossBarHideOnFinish = map.boolValue("bossbar-hide-on-finish", false),
+                    bossBarRemoveOnFinish = map.boolValue("bossbar-remove-on-finish", false)
                 )
             }.orEmpty()
             trigger to actions

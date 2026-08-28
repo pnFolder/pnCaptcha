@@ -9,7 +9,12 @@ class MessageService(
     private val config: CaptchaConfig,
     private val miniMessage: MiniMessage = MiniMessage.miniMessage()
 ) {
-    fun component(lines: List<String>, placeholders: Map<String, Any?> = emptyMap()): Component {
+    /**
+     * Renders MiniMessage regardless of messages.enabled.
+     * Actions use this method so disabling lifecycle chat messages does not disable
+     * titles, actionbars, bossbars or disconnect text configured through Actions.
+     */
+    fun render(lines: List<String>, placeholders: Map<String, Any?> = emptyMap()): Component {
         if (lines.isEmpty()) return Component.empty()
 
         val rendered = lines.map { line ->
@@ -28,8 +33,13 @@ class MessageService(
         return result
     }
 
+    fun component(lines: List<String>, placeholders: Map<String, Any?> = emptyMap()): Component {
+        if (!config.messages.enabled || lines.isEmpty()) return Component.empty()
+        return render(lines, placeholders)
+    }
+
     fun send(player: Player, lines: List<String>, placeholders: Map<String, Any?> = emptyMap()) {
         if (!config.messages.enabled || lines.isEmpty()) return
-        player.sendMessage(component(lines, placeholders))
+        player.sendMessage(render(lines, placeholders))
     }
 }

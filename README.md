@@ -18,7 +18,8 @@ PacketEvents не требуется.
 - Weighted-палитры front/side/back, accent-блоки, прозрачные glass-помехи и отдельные параметры рандомизации.
 - Recovery при падении, слишком большой высоте и выходе за горизонтальный радиус.
 - Многострочные MiniMessage-сообщения, HEX, gradients, hover и click.
-- Actions на события CAPTCHA: `message`, `actionbar`, `title`, `sound`, `command`, `disconnect`, `connect`, `teleport`, `gamemode`.
+- Actions: `message`, `actionbar`, `title`, `sound`, `command`, `disconnect`, `connect`, `teleport`, `gamemode`, `bossbar`.
+- BossBar Actions поддерживают create/update, countdown/countup-анимацию, set/add progress, pause/resume, hide/remove и динамические placeholders времени/процента.
 - Несколько backend-серверов с `priority`, `least-players`, `random`, `weighted-random`, `round-robin` и `first-available`.
 - Общий лимит сети, резервные слоты и отдельные лимиты/резервные слоты каждого backend.
 - IP rate-limit, TTL cache проверенных UUID/IP, bypass permission и лимит одновременно активных CAPTCHA-миров.
@@ -33,13 +34,49 @@ PacketEvents не требуется.
 plugins/pncaptcha/config.yml
 ```
 
-Схема конфигурации `config-version: 2`. При переходе со старой схемы существующий файл сохраняется как:
+Схема конфигурации `config-version: 3`. Каждая настройка, каждый Action и BossBar-параметр описаны комментариями непосредственно в стандартном `config.yml`; там же есть копируемые примеры.
+
+При переходе со схемы 1.0.0 старый конфиг сохраняется как:
 
 ```text
-plugins/pncaptcha/config.pre-1.0.0.yml.bak
+plugins/pncaptcha/config.pre-1.1.0.yml.bak
 ```
 
-После этого создаётся полный актуальный конфиг со всеми комментариями и примерами.
+После этого создаётся новый документированный конфиг.
+
+## BossBar Actions
+
+Пример таймера, автоматически использующего `general.timeout-seconds`:
+
+```yaml
+actions:
+  enabled: true
+  triggers:
+    challenge-start:
+      - type: "bossbar"
+        bossbar-id: "captcha-timer"
+        bossbar-operation: "animate"
+        text: "<aqua>Проверка</aqua> <gray>• {bossbar_seconds}s</gray>"
+        bossbar-color: "blue"
+        bossbar-overlay: "progress"
+        bossbar-start-progress: 1.0
+        bossbar-end-progress: 0.0
+        bossbar-duration-ms: 0
+        bossbar-update-interval-ms: 100
+```
+
+Уменьшение той же полоски после неверного ответа:
+
+```yaml
+wrong-answer:
+  - type: "bossbar"
+    bossbar-id: "captcha-timer"
+    bossbar-operation: "add-progress"
+    bossbar-progress-delta: -0.12
+    bossbar-color: "red"
+```
+
+Операции: `show`, `update`, `animate`, `set-progress`, `add-progress`, `pause`, `resume`, `hide`, `remove`.
 
 ## Routing
 
@@ -62,7 +99,7 @@ routing:
 
 ## Actions
 
-Actions выполняются по trigger-событиям:
+Triggers:
 
 ```text
 challenge-start
@@ -78,23 +115,9 @@ unavailable
 route-unavailable
 ```
 
-Пример:
+Основные placeholders: `{player}`, `{uuid}`, `{ip}`, `{online}`, `{attempt}`, `{max}`, `{remaining}`, `{timeout}`, `{reason}`, `{server}`, `{captcha}`.
 
-```yaml
-actions:
-  enabled: true
-  triggers:
-    wrong-answer:
-      - type: "actionbar"
-        text: "<red>Неверно</red> <gray>{attempt}/{max}</gray>"
-
-      - type: "sound"
-        sound: "minecraft:block.note_block.bass"
-        volume: 0.8
-        sound-pitch: 0.7
-```
-
-Для действий доступны placeholders `{player}`, `{uuid}`, `{ip}`, `{online}`, `{attempt}`, `{max}`, `{reason}`, `{server}` и `{captcha}`.
+BossBar-анимация дополнительно даёт `{bossbar_progress}`, `{bossbar_percent}`, `{bossbar_seconds}`, `{bossbar_millis}`.
 
 ## Build
 
@@ -105,5 +128,5 @@ gradle clean build
 Готовый shaded JAR:
 
 ```text
-build/libs/pnCaptcha-1.0.0.jar
+build/libs/pnCaptcha-1.1.0.jar
 ```

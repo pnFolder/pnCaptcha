@@ -138,12 +138,26 @@ data class CaptchaConfig(
             entries.forEach { action ->
                 require(action.type.lowercase() in setOf(
                     "message", "actionbar", "title", "sound", "command", "disconnect", "connect",
-                    "teleport", "gamemode"
+                    "teleport", "gamemode", "bossbar"
                 )) { "Unsupported action type '${action.type}' in trigger '$trigger'" }
                 require(action.delayMillis in 0L..300_000L)
                 require(action.chancePercent in 0.0..100.0)
                 require(action.volume in 0.0f..16.0f)
                 require(action.soundPitch in 0.0f..2.0f)
+
+                if (action.type.equals("bossbar", ignoreCase = true)) {
+                    require(action.bossBarId.isNotBlank())
+                    require(action.bossBarOperation.lowercase() in setOf(
+                        "show", "update", "animate", "set-progress", "add-progress",
+                        "pause", "resume", "hide", "remove"
+                    )) { "Unsupported bossbar-operation '${action.bossBarOperation}' in trigger '$trigger'" }
+                    require(action.bossBarProgress == null || action.bossBarProgress in 0.0..1.0)
+                    require(action.bossBarStartProgress == null || action.bossBarStartProgress in 0.0..1.0)
+                    require(action.bossBarEndProgress == null || action.bossBarEndProgress in 0.0..1.0)
+                    require(action.bossBarProgressDelta in -1.0..1.0)
+                    require(action.bossBarDurationMillis in 0L..3_600_000L)
+                    require(action.bossBarUpdateIntervalMillis in 50L..5_000L)
+                }
             }
         }
     }
@@ -418,7 +432,19 @@ data class ActionDefinition(
     val source: String = "master",
     val volume: Float = 1.0f,
     val soundPitch: Float = 1.0f,
-    val gameMode: String = "adventure"
+    val gameMode: String = "adventure",
+    val bossBarId: String = "captcha",
+    val bossBarOperation: String = "show",
+    val bossBarColor: String = "blue",
+    val bossBarOverlay: String = "progress",
+    val bossBarProgress: Double? = null,
+    val bossBarProgressDelta: Double = 0.0,
+    val bossBarStartProgress: Double? = null,
+    val bossBarEndProgress: Double? = null,
+    val bossBarDurationMillis: Long = 0L,
+    val bossBarUpdateIntervalMillis: Long = 100L,
+    val bossBarHideOnFinish: Boolean = false,
+    val bossBarRemoveOnFinish: Boolean = false
 )
 
 data class MessageConfig(

@@ -19,6 +19,7 @@ import ru.privatenull.pncaptcha.config.RandomnessConfig
 import ru.privatenull.pncaptcha.config.SceneConfig
 import ru.privatenull.pncaptcha.session.CaptchaSession
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 import java.time.Duration
@@ -89,7 +90,7 @@ class CoreServicesTest {
     }
 
     @Test
-    fun `default yaml is copied and parsed`(@TempDir tempDir: Path) {
+    fun `default yaml includes documented bossbar actions`(@TempDir tempDir: Path) {
         val config = CaptchaConfigLoader.load(tempDir)
         assertTrue(tempDir.resolve("config.yml").toFile().isFile)
         assertEquals(30.0, config.scene.distanceBlocks)
@@ -97,6 +98,26 @@ class CoreServicesTest {
         assertEquals(2, config.geometry.pixelWidth)
         assertEquals(3, config.geometry.depthBlocks)
         assertTrue(config.palette.front.materials.isNotEmpty())
+
+        val startBossBar = config.actions.triggers["challenge-start"].orEmpty()
+            .first { it.type == "bossbar" }
+        assertEquals("animate", startBossBar.bossBarOperation)
+        assertEquals("captcha-timer", startBossBar.bossBarId)
+        assertEquals(1.0, startBossBar.bossBarStartProgress)
+        assertEquals(0.0, startBossBar.bossBarEndProgress)
+
+        val wrongBossBar = config.actions.triggers["wrong-answer"].orEmpty()
+            .first { it.type == "bossbar" }
+        assertEquals("add-progress", wrongBossBar.bossBarOperation)
+        assertTrue(wrongBossBar.bossBarProgressDelta < 0.0)
+    }
+
+    @Test
+    fun `old config is backed up when config version changes`(@TempDir tempDir: Path) {
+        Files.writeString(tempDir.resolve("config.yml"), "config-version: 2\n")
+        CaptchaConfigLoader.load(tempDir)
+        assertTrue(tempDir.resolve("config.pre-1.1.0.yml.bak").toFile().isFile)
+        assertTrue(Files.readString(tempDir.resolve("config.yml")).contains("config-version: 3"))
     }
 
     @Test

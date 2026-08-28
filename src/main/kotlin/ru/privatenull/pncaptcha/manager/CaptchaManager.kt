@@ -43,9 +43,7 @@ class CaptchaManager(
     fun register(event: LoginLimboRegisterEvent) {
         val player = event.player
 
-        if (config.security.bypassPermission.isNotBlank() && player.hasPermission(config.security.bypassPermission)) {
-            return
-        }
+        if (config.security.bypassPermission.isNotBlank() && player.hasPermission(config.security.bypassPermission)) return
         if (cache.isVerified(player)) return
 
         if (router.networkIsFull(player)) {
@@ -78,6 +76,7 @@ class CaptchaManager(
     private fun begin(player: Player) {
         sessions.remove(player.uniqueId)?.let { stale ->
             timeoutTasks.remove(player.uniqueId)?.cancel()
+            actions.cleanup(player.uniqueId)
             environment.dispose(stale.id)
         }
         lastRecoveryAt.remove(player.uniqueId)
@@ -102,6 +101,7 @@ class CaptchaManager(
             )
         } catch (throwable: Throwable) {
             sessions.remove(player.uniqueId, session.id)
+            actions.cleanup(player.uniqueId)
             environment.dispose(session.id)
             logger.error("Failed to build/spawn CAPTCHA Limbo for {}", player.username, throwable)
             val terminal = actions.fire(
@@ -126,11 +126,8 @@ class CaptchaManager(
         limboPlayer.sendAbilities()
         limboPlayer.setWorldTime(config.limbo.worldTimeTicks)
 
-        if (config.player.recovery.enabled || config.limbo.fallingEnabled) {
-            limboPlayer.enableFalling()
-        } else {
-            limboPlayer.disableFalling()
-        }
+        if (config.player.recovery.enabled || config.limbo.fallingEnabled) limboPlayer.enableFalling()
+        else limboPlayer.disableFalling()
 
         teleportToCamera(sessionId, limboPlayer, null, null)
 
@@ -142,15 +139,9 @@ class CaptchaManager(
         }
 
         if (becameWaiting) {
-            val placeholders = mapOf(
-                "max" to config.maxAttempts,
-                "timeout" to config.general.timeoutSeconds
-            )
+            val placeholders = mapOf("max" to config.maxAttempts, "timeout" to config.general.timeoutSeconds)
             messages.send(limboPlayer.proxyPlayer, config.messages.prompt, placeholders)
-            val terminal = actions.fire(
-                "challenge-start",
-                context(session, limboPlayer, placeholders = placeholders)
-            )
+            val terminal = actions.fire("challenge-start", context(session, limboPlayer, placeholders = placeholders))
             if (terminal) cleanup(session, delayedDispose = true)
         }
     }
@@ -182,21 +173,19 @@ class CaptchaManager(
         }
 
         if (exhausted) {
-            val actionContext = context(session, limboPlayer)
-            val terminal = actions.fire("exhausted", actionContext)
-            if (!terminal) {
-                proxyPlayer.disconnect(messages.component(config.messages.tooManyAttempts))
-            }
+            val terminal = actions.fire("exhausted", context(session, limboPlayer))
+            if (!terminal) proxyPlayer.disconnect(messages.component(config.messages.tooManyAttempts))
             cleanup(session, delayedDispose = true)
             return
         }
 
-        val placeholders = mapOf("attempt" to session.attempts, "max" to config.maxAttempts)
-        messages.send(proxyPlayer, config.messages.wrong, placeholders)
-        val terminal = actions.fire(
-            "wrong-answer",
-            context(session, limboPlayer, placeholders = placeholders)
+        val placeholders = mapOf(
+            "attempt" to session.attempts,
+            "max" to config.maxAttempts,
+            "remaining" to (config.maxAttempts - session.attempts).coerceAtLeast(0)
         )
+        messages.send(proxyPlayer, config.messages.wrong, placeholders)
+        val terminal = actions.fire("wrong-answer", context(session, limboPlayer, placeholders = placeholders))
         if (terminal) cleanup(session, delayedDispose = true)
     }
 
@@ -205,9 +194,7 @@ class CaptchaManager(
         if (target == null) {
             logger.error("No configured routing server is available")
             val terminal = actions.fire("route-unavailable", context(session, limboPlayer))
-            if (!terminal) {
-                proxyPlayer.disconnect(messages.component(config.messages.routeUnavailable))
-            }
+            if (!terminal) proxyPlayer.disconnect(messages.component(config.messages.routeUnavailable))
             cleanup(session, delayedDispose = true)
             return
         }
@@ -215,21 +202,16 @@ class CaptchaManager(
         val serverName = target.serverInfo.name
         val placeholders = mapOf("server" to serverName)
         messages.send(proxyPlayer, config.messages.passed, placeholders)
-
-        val terminal = actions.fire(
-            "passed",
-            context(session, limboPlayer, server = serverName, placeholders = placeholders)
-        )
+        val terminal = actions.fire("passed", context(session, limboPlayer, server = serverName, placeholders = placeholders))
 
         cache.markVerified(proxyPlayer)
         sessions.remove(session.playerId, session.id)
         timeoutTasks.remove(session.playerId)?.cancel()
         lastRecoveryAt.remove(session.playerId)
+        actions.cleanup(session.playerId)
         session.limboPlayer = null
 
-        if (!terminal) {
-            limboPlayer.disconnect(target)
-        }
+        if (!terminal) limboPlayer.disconnect(target)
         scheduleDispose(session.id)
     }
 
@@ -271,13 +253,8 @@ class CaptchaManager(
 
         teleportToCamera(sessionId, limboPlayer, yaw, pitch)
         val placeholders = mapOf("reason" to reason)
-        if (config.player.recovery.sendMessage) {
-            messages.send(limboPlayer.proxyPlayer, config.messages.recovered, placeholders)
-        }
-        val terminal = actions.fire(
-            "recovery",
-            context(session, limboPlayer, reason = reason, placeholders = placeholders)
-        )
+        if (config.player.recovery.sendMessage) messages.send(limboPlayer.proxyPlayer, config.messages.recovered, placeholders)
+        val terminal = actions.fire("recovery", context(session, limboPlayer, reason = reason, placeholders = placeholders))
         if (terminal) cleanup(session, delayedDispose = true)
     }
 
@@ -285,16 +262,20 @@ class CaptchaManager(
         val session = sessions.remove(playerId, sessionId) ?: return
         timeoutTasks.remove(playerId)?.cancel()
         lastRecoveryAt.remove(playerId)
+        actions.cleanup(playerId)
         session.limboPlayer = null
         environment.dispose(session.id)
     }
 
     fun onVelocityDisconnect(playerId: UUID) {
-        val session = sessions.remove(playerId) ?: return
+        val session = sessions.remove(playerId)
         timeoutTasks.remove(playerId)?.cancel()
         lastRecoveryAt.remove(playerId)
-        session.limboPlayer = null
-        environment.dispose(session.id)
+        actions.cleanup(playerId)
+        if (session != null) {
+            session.limboPlayer = null
+            environment.dispose(session.id)
+        }
     }
 
     private fun timeout(playerId: UUID, sessionId: UUID) {
@@ -352,6 +333,7 @@ class CaptchaManager(
         sessions.remove(session.playerId, session.id)
         timeoutTasks.remove(session.playerId)?.cancel()
         lastRecoveryAt.remove(session.playerId)
+        actions.cleanup(session.playerId)
         session.limboPlayer = null
         if (delayedDispose) scheduleDispose(session.id) else environment.dispose(session.id)
     }
@@ -376,6 +358,7 @@ class CaptchaManager(
         timeoutTasks.values.forEach(ScheduledTask::cancel)
         timeoutTasks.clear()
         lastRecoveryAt.clear()
+        actions.shutdown()
         sessions.clear()
     }
 

@@ -129,6 +129,9 @@ class PnCaptchaPlugin @Inject constructor(
                 metrics.addCustomChart(SimplePie("noise_enabled") { config.noise.enabled.toString() })
                 metrics.addCustomChart(SimplePie("recovery_enabled") { config.player.recovery.enabled.toString() })
                 metrics.addCustomChart(SimplePie("actions_enabled") { config.actions.enabled.toString() })
+                metrics.addCustomChart(SimplePie("bossbar_actions") {
+                    config.actions.triggers.values.flatten().any { it.type.equals("bossbar", ignoreCase = true) }.toString()
+                })
             }
         }
 
@@ -174,7 +177,7 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "1.0.0"
+        const val VERSION = "1.1.0"
         const val BSTATS_SERVICE_ID = 33692
     }
 }
