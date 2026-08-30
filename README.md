@@ -13,8 +13,12 @@ PacketEvents не требуется.
 ## Основное
 
 - Реальная 3D voxel CAPTCHA внутри LimboAPI `VirtualWorld` без Paper/backend для проверки.
+- Персональный VirtualWorld создаётся и полностью заполняется блоками до появления игрока.
 - Полная настройка расстояния, позиции, yaw/pitch/roll, размеров voxel, глубины, front/back-слоёв и расстояния между символами.
-- Встроенный `classic-5x7` и пользовательский bitmap-шрифт из `0/1` прямо в `config.yml`.
+- Встроенные шрифты `classic-5x7` и `ornate-9x12`, плюс пользовательский bitmap-шрифт из `0/1` прямо в `config.yml`.
+- `porous` fill с настраиваемой плотностью, сохранением связности, защитой концов штрихов и контролем внешнего контура.
+- `clustered` palette mode для цветовых пятен из нескольких Minecraft-материалов внутри одного символа.
+- Отдельная outline-палитра для более читаемого внешнего силуэта porous-символов.
 - Weighted-палитры front/side/back, accent-блоки, прозрачные glass-помехи и отдельные параметры рандомизации.
 - Recovery при падении, слишком большой высоте и выходе за горизонтальный радиус.
 - Многострочные MiniMessage-сообщения, HEX, gradients, hover и click.
@@ -26,23 +30,101 @@ PacketEvents не требуется.
 - Асинхронная проверка GitHub Releases при запуске.
 - bStats Velocity с service id `33698`; библиотека shaded и relocated внутрь JAR.
 
+## Новый mosaic-визуал
+
+Новая визуальная система ориентирована на крупную CAPTCHA, расположенную дальше от камеры. Буквы остаются одним статическим объектом внутри Limbo, но перед входом игрока каждая сцена может получить собственную геометрию, пустоты и распределение материалов.
+
+Основные параметры:
+
+```yaml
+scene:
+  distance-blocks: 42.0
+  rotation:
+    yaw-degrees: 8.0
+
+font:
+  preset: "ornate-9x12"
+
+geometry:
+  depth-blocks: 4
+  fill:
+    mode: "porous"
+    density: 0.78
+    preserve-connectivity: true
+    protect-endpoints: true
+    outline-preserve-percent: 78.0
+
+palette:
+  mode: "clustered"
+  cluster-size-min: 2
+  cluster-size-max: 5
+  outline:
+    enabled: true
+    chance-percent: 86.0
+```
+
+`porous` не просто случайно удаляет любые блоки: при включённом `preserve-connectivity` алгоритм старается не разваливать символ на независимые части, а `protect-endpoints` бережёт окончания штрихов.
+
+`clustered` распределяет материалы небольшими группами, поэтому внутри одного символа появляются участки stained glass, terracotta, copper и тёмных блоков вместо полностью независимого цветного шума.
+
 ## Конфигурация
 
-Вся настройка находится в одном файле:
+Вся runtime-настройка находится в одном файле:
 
 ```text
 plugins/pncaptcha/config.yml
 ```
 
-Схема конфигурации `config-version: 3`. Каждая настройка, каждый Action и BossBar-параметр описаны комментариями непосредственно в стандартном `config.yml`; там же есть копируемые примеры.
+Схема конфигурации сейчас `config-version: 3`.
 
-При переходе со схемы 1.0.0 старый конфиг сохраняется как:
+Стандартный `config.yml` намеренно большой: он является встроенной документацией. Для каждого параметра указано назначение, допустимые значения, специальные значения вроде `0` и практические примеры. Все Action types и BossBar operations также расписаны прямо в конфиге.
 
-```text
-plugins/pncaptcha/config.pre-1.1.0.yml.bak
+После изменения конфигурации требуется полный restart Velocity.
+
+## Готовые примеры
+
+В каталоге [`examples/`](examples/) находятся копируемые наборы настроек:
+
+- `visual-mosaic-reference.yml` — основной mosaic/reference стиль;
+- `visual-classic-dense.yml` — прежний плотный `classic-5x7`;
+- `visual-frost-glass.yml` — холодный стеклянный стиль;
+- `visual-copper-industrial.yml` — медный industrial;
+- `visual-neon-void.yml` — тёмный neon/void;
+- `visual-hard-readable.yml` — более сложный, но сохраняющий читаемость вариант;
+- `visual-minimal-clean.yml` — чистый вариант для диагностики;
+- `font-custom-example.yml` — пример собственного bitmap-шрифта;
+- `actions-bossbar-showcase.yml` — большая BossBar-демонстрация;
+- `actions-admin-feedback.yml` — примеры разных Action types;
+- `routing-multi-lobby.yml` — пример нескольких lobby и резервного backend.
+
+Примеры сделаны как фрагменты секций: копируй нужные блоки в основной `config.yml`, а не заменяй документационный конфиг вслепую.
+
+## Быстрый возврат к прежнему визуалу
+
+Новая система не требует удаления старого стиля. Для возврата к более плотной CAPTCHA достаточно примерно таких значений:
+
+```yaml
+scene:
+  distance-blocks: 30.0
+  rotation:
+    yaw-degrees: 28.0
+
+font:
+  preset: "classic-5x7"
+
+geometry:
+  pixel-width: 2
+  pixel-height: 2
+  depth-blocks: 3
+  fill:
+    mode: "solid"
+    density: 1.0
+
+palette:
+  mode: "per-block"
+  outline:
+    enabled: false
 ```
-
-После этого создаётся новый документированный конфиг.
 
 ## BossBar Actions
 
@@ -125,8 +207,4 @@ BossBar-анимация дополнительно даёт `{bossbar_progress}
 gradle clean build
 ```
 
-Готовый shaded JAR:
-
-```text
-build/libs/pnCaptcha-1.1.1.jar
-```
+Пока feature-ветка не выпущена отдельным релизом, project version остаётся текущей стабильной версией. Финальное имя release-JAR будет приведено к pnFolder Release Authoring Contract только после утверждения релиза.
