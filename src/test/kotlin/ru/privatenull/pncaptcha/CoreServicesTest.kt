@@ -148,9 +148,9 @@ class CoreServicesTest {
         assertEquals("clustered", config.palette.mode)
         assertTrue(config.palette.front.materials.isNotEmpty())
         assertTrue(config.palette.outline.enabled)
-        assertTrue(text.contains("POROUS FILL"))
+        assertTrue(text.contains("FILL — ПЛОТНЫЕ ИЛИ КОНТРОЛИРУЕМО"))
         assertTrue(text.contains("cluster-size-min"))
-        assertTrue(text.contains("БЫСТРЫЙ ОТКАТ"))
+        assertTrue(text.contains("БЫСТРЫЙ ВОЗВРАТ"))
 
         val startBossBar = config.actions.triggers["challenge-start"].orEmpty()
             .first { it.type == "bossbar" }
