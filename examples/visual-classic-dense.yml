@@ -1,0 +1,99 @@
+# Classic Dense
+# Возвращает более старый плотный стиль без porous и clustered.
+
+scene:
+  distance-blocks: 30.0
+  center-height-blocks: 8.0
+  rotation:
+    yaw-degrees: 28.0
+    pitch-degrees: 0.0
+    roll-degrees: 0.0
+
+font:
+  preset: "classic-5x7"
+
+geometry:
+  pixel-width: 2
+  pixel-height: 2
+  depth-blocks: 3
+  front-thickness-blocks: 1
+  back-thickness-blocks: 1
+  letter-gap-blocks: 2
+
+  fill:
+    mode: "solid"
+    density: 1.0
+    preserve-connectivity: true
+    protect-endpoints: true
+    outline-preserve-percent: 100.0
+    min-retained-pixels: 14
+
+randomness:
+  character:
+    horizontal-jitter-blocks: 0
+    vertical-jitter-blocks: 1
+    depth-jitter-blocks: 1
+    depth-variation-blocks: 0
+    rotation-yaw-jitter-degrees: 0.0
+    rotation-pitch-jitter-degrees: 0.0
+    rotation-roll-jitter-degrees: 0.0
+
+palette:
+  mode: "per-block"
+  cluster-size-min: 1
+  cluster-size-max: 1
+
+  front:
+    - block: "minecraft:polished_deepslate"
+      weight: 5
+    - block: "minecraft:cyan_terracotta"
+      weight: 3
+    - block: "minecraft:light_blue_terracotta"
+      weight: 2
+
+  side:
+    - block: "minecraft:deepslate_tiles"
+      weight: 5
+    - block: "minecraft:deepslate_bricks"
+      weight: 3
+    - block: "minecraft:blackstone"
+      weight: 2
+
+  back:
+    - block: "minecraft:blackstone"
+      weight: 4
+    - block: "minecraft:polished_blackstone"
+      weight: 2
+
+  accent:
+    enabled: true
+    chance-percent: 8.0
+    materials:
+      - block: "minecraft:sea_lantern"
+        weight: 1
+      - block: "minecraft:verdant_froglight"
+        weight: 1
+
+  outline:
+    enabled: false
+    chance-percent: 0.0
+    materials:
+      - block: "minecraft:polished_deepslate"
+        weight: 1
+
+noise:
+  enabled: true
+  count: 10
+  cluster-size-min: 1
+  cluster-size-max: 2
+  horizontal-padding-blocks: 4
+  vertical-padding-blocks: 3
+  depth-min-blocks: 3
+  depth-max-blocks: 8
+  materials:
+    - block: "minecraft:gray_stained_glass"
+      weight: 5
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 2
+    - block: "minecraft:cyan_stained_glass"
+      weight: 1
