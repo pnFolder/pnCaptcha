@@ -1,0 +1,96 @@
+# Neon Void
+# Почти чёрная конструкция с редкими яркими цветными точками.
+
+scene:
+  distance-blocks: 43.0
+  center-height-blocks: 7.0
+  rotation:
+    yaw-degrees: 10.0
+    pitch-degrees: 0.0
+    roll-degrees: 1.5
+
+font:
+  preset: "ornate-9x12"
+
+geometry:
+  pixel-width: 1
+  pixel-height: 1
+  depth-blocks: 4
+  letter-gap-blocks: 3
+  fill:
+    mode: "porous"
+    density: 0.72
+    preserve-connectivity: true
+    protect-endpoints: true
+    outline-preserve-percent: 88.0
+    min-retained-pixels: 14
+
+palette:
+  mode: "clustered"
+  cluster-size-min: 2
+  cluster-size-max: 5
+
+  front:
+    - block: "minecraft:black_stained_glass"
+      weight: 5
+    - block: "minecraft:gray_stained_glass"
+      weight: 4
+    - block: "minecraft:polished_blackstone"
+      weight: 4
+    - block: "minecraft:purple_stained_glass"
+      weight: 2
+    - block: "minecraft:blue_stained_glass"
+      weight: 2
+
+  side:
+    - block: "minecraft:blackstone"
+      weight: 6
+    - block: "minecraft:polished_blackstone"
+      weight: 5
+    - block: "minecraft:deepslate_tiles"
+      weight: 3
+
+  back:
+    - block: "minecraft:blackstone"
+      weight: 6
+    - block: "minecraft:polished_blackstone"
+      weight: 4
+
+  accent:
+    enabled: true
+    chance-percent: 7.0
+    materials:
+      - block: "minecraft:sea_lantern"
+        weight: 1
+      - block: "minecraft:verdant_froglight"
+        weight: 1
+      - block: "minecraft:pearlescent_froglight"
+        weight: 1
+
+  outline:
+    enabled: true
+    chance-percent: 96.0
+    materials:
+      - block: "minecraft:blackstone"
+        weight: 5
+      - block: "minecraft:polished_blackstone"
+        weight: 5
+      - block: "minecraft:deepslate_tiles"
+        weight: 3
+
+noise:
+  enabled: true
+  count: 8
+  cluster-size-min: 1
+  cluster-size-max: 2
+  horizontal-padding-blocks: 6
+  vertical-padding-blocks: 4
+  depth-min-blocks: 3
+  depth-max-blocks: 9
+  materials:
+    - block: "minecraft:purple_stained_glass"
+      weight: 3
+    - block: "minecraft:blue_stained_glass"
+      weight: 3
+    - block: "minecraft:black_stained_glass"
+      weight: 5
