@@ -1,0 +1,106 @@
+# BossBar Showcase
+# Копируй нужные Actions в actions.triggers основного config.yml.
+
+actions:
+  enabled: true
+
+  triggers:
+    challenge-start:
+      # Countdown на всё время CAPTCHA.
+      - type: "bossbar"
+        bossbar-id: "captcha-timer"
+        bossbar-operation: "animate"
+        text: "<gradient:#54F4D1:#4D9CFF><bold>Проверка</bold></gradient> <dark_gray>• <white>{bossbar_seconds}s</white> <dark_gray>• <gray>{bossbar_percent}%</gray>"
+        bossbar-color: "blue"
+        bossbar-overlay: "progress"
+        bossbar-start-progress: 1.0
+        bossbar-end-progress: 0.0
+        bossbar-duration-ms: 0
+        bossbar-update-interval-ms: 100
+        bossbar-remove-on-finish: true
+
+      # Отдельная панель может показывать попытки.
+      - type: "bossbar"
+        bossbar-id: "attempts"
+        bossbar-operation: "show"
+        text: "<yellow>Попытки: <white>{remaining}/{max}</white></yellow>"
+        bossbar-color: "yellow"
+        bossbar-overlay: "notched_10"
+        bossbar-progress: 1.0
+
+    wrong-answer:
+      # Штраф таймеру -15%.
+      - type: "bossbar"
+        bossbar-id: "captcha-timer"
+        bossbar-operation: "add-progress"
+        bossbar-progress-delta: -0.15
+        bossbar-color: "red"
+        text: "<red><bold>Ошибка</bold></red> <dark_gray>• <white>{bossbar_seconds}s</white>"
+
+      # Отдельно уменьшаем панель попыток.
+      - type: "bossbar"
+        bossbar-id: "attempts"
+        bossbar-operation: "add-progress"
+        bossbar-progress-delta: -0.33
+        text: "<yellow>Попытки: <white>{remaining}/{max}</white></yellow>"
+
+    passed:
+      - type: "bossbar"
+        bossbar-id: "captcha-timer"
+        bossbar-operation: "remove"
+
+      - type: "bossbar"
+        bossbar-id: "attempts"
+        bossbar-operation: "remove"
+
+      # Короткий countup как визуальный переход перед backend.
+      - type: "bossbar"
+        bossbar-id: "connecting"
+        bossbar-operation: "animate"
+        text: "<green>Подключение <white>{bossbar_percent}%</white></green>"
+        bossbar-color: "green"
+        bossbar-start-progress: 0.0
+        bossbar-end-progress: 1.0
+        bossbar-duration-ms: 1200
+        bossbar-update-interval-ms: 75
+        bossbar-remove-on-finish: true
+
+    exhausted:
+      - type: "bossbar"
+        bossbar-id: "captcha-timer"
+        bossbar-operation: "remove"
+      - type: "bossbar"
+        bossbar-id: "attempts"
+        bossbar-operation: "remove"
+
+    timeout:
+      - type: "bossbar"
+        bossbar-id: "captcha-timer"
+        bossbar-operation: "remove"
+      - type: "bossbar"
+        bossbar-id: "attempts"
+        bossbar-operation: "remove"
+
+# Дополнительные операции, которые можно использовать в любом trigger:
+#
+# Пауза:
+# - type: "bossbar"
+#   bossbar-id: "captcha-timer"
+#   bossbar-operation: "pause"
+#
+# Продолжение через 2 секунды:
+# - type: "bossbar"
+#   delay-ms: 2000
+#   bossbar-id: "captcha-timer"
+#   bossbar-operation: "resume"
+#
+# Установить ровно 50%:
+# - type: "bossbar"
+#   bossbar-id: "captcha-timer"
+#   bossbar-operation: "set-progress"
+#   bossbar-progress: 0.5
+#
+# Скрыть, но сохранить состояние:
+# - type: "bossbar"
+#   bossbar-id: "captcha-timer"
+#   bossbar-operation: "hide"
