@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ github.event.head_commit.message == 'release pnCaptcha 1.1.1' }}
+    if: ${{ github.event.head_commit.message == 'release pnCaptcha 1.2.0' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,38 +31,26 @@ jobs:
 
       - name: Verify release jar
         run: |
-          JAR="build/libs/pnCaptcha-1.1.1.jar"
+          JAR="build/libs/pnCaptcha-1.2.0-velocity-java21.jar"
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'velocity-plugin.json'
           jar tf "$JAR" | grep -q 'config.yml'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/captcha/CaptchaFont.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/captcha/CaptchaLayout.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/BossBarService.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class'
+          if jar tf "$JAR" | grep -q '^org/bstats/'; then
+            echo 'bStats was not relocated correctly'
+            exit 1
+          fi
 
-      - name: Publish
+      - name: Publish stable latest release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > release-notes.md <<'EOF'
-          # Корректная bStats-статистика
-
-          pnCaptcha теперь отправляет агрегированную статистику в правильный bStats-проект для Velocity.
-
-          ## Новое
-          - Добавлен актуальный bStats service ID `33698` для Velocity-проекта pnCaptcha.
-
-          ## Улучшено
-          - Улучшена точность публичной статистики установок и custom charts pnCaptcha.
-
-          ## Исправлено
-          - Исправлена отправка метрик в ранее созданный bStats-проект с неправильной платформой.
-          - Исправлен bStats service ID в документации и runtime-конфигурации плагина.
-
-          ## Важно
-          > Конфигурацию менять не требуется: достаточно заменить JAR и перезапустить Velocity.
-          EOF
-
-          gh release create v1.1.1 \
-            build/libs/pnCaptcha-1.1.1.jar \
+          gh release create v1.2.0 \
+            build/libs/pnCaptcha-1.2.0-velocity-java21.jar \
             --target "$GITHUB_SHA" \
-            --title 'pnCaptcha — корректная bStats-статистика' \
-            --notes-file release-notes.md
+            --title 'Мозаичная 3D CAPTCHA' \
+            --notes-file docs/releases/v1.2.0.md \
+            --latest
