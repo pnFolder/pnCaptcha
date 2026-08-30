@@ -1,9 +1,13 @@
 package ru.privatenull.pncaptcha.captcha
 
 import ru.privatenull.pncaptcha.config.CaptchaConfig
+import ru.privatenull.pncaptcha.config.MaterialGroup
 import ru.privatenull.pncaptcha.config.WeightedMaterial
+import java.util.ArrayDeque
 import java.util.Random
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -27,6 +31,7 @@ class CaptchaLayout {
 
         answer.forEachIndexed { charIndex, char ->
             val pattern = font.pattern(char)
+            val surface = buildSurface(pattern, font, config, random)
             val baseCharU = firstU + charIndex * (glyphWidth + config.geometry.letterGapBlocks)
             val charCenterU = baseCharU + (glyphWidth - 1) / 2.0
             val charVerticalBase = charIndex * config.geometry.letterRiseBlocks
@@ -42,49 +47,33 @@ class CaptchaLayout {
             val charPitch = signedAngle(config.randomness.character.rotationPitchJitterDegrees, config, random)
             val charRoll = signedAngle(config.randomness.character.rotationRollJitterDegrees, config, random)
 
-            val perCharacterFront = pick(config.palette.front.materials, random)
-            val perCharacterSide = pick(config.palette.side.materials, random)
-            val perCharacterBack = pick(config.palette.back.materials, random)
+            val picker = CharacterMaterialPicker(config, random)
 
-            pattern.forEachIndexed { visualRow, pixels ->
-                val row = if (config.geometry.mirrorVertical) font.height - 1 - visualRow else visualRow
-                pixels.indices.forEach { visualColumn ->
-                    val column = if (config.geometry.mirrorHorizontal) font.width - 1 - visualColumn else visualColumn
-                    if (pattern[row][column] != '1') return@forEach
+            surface.retained.forEach { cell ->
+                val rawU = baseCharU + cell.x + charHorizontalJitter
+                val rawV = topV - cell.y + charVerticalBase + charVerticalJitter
+                val frontD = charDepthBase + charDepthJitter
+                val outline = cell in surface.originalOutline
 
-                    for (pixelX in 0 until config.geometry.pixelWidth) {
-                        for (pixelY in 0 until config.geometry.pixelHeight) {
-                            val rawU = baseCharU + visualColumn * config.geometry.pixelWidth + pixelX + charHorizontalJitter
-                            val rawV = topV - visualRow * config.geometry.pixelHeight - pixelY + charVerticalBase + charVerticalJitter
-                            val frontD = charDepthBase + charDepthJitter
-
-                            for (layer in charDepth - 1 downTo 0) {
-                                val material = when {
-                                    layer < config.geometry.frontThicknessBlocks -> accentedFront(
-                                        materialFor(config.palette.mode, config.palette.front.materials, perCharacterFront, random),
-                                        config,
-                                        random
-                                    )
-                                    layer >= charDepth - config.geometry.backThicknessBlocks ->
-                                        materialFor(config.palette.mode, config.palette.back.materials, perCharacterBack, random)
-                                    else -> materialFor(config.palette.mode, config.palette.side.materials, perCharacterSide, random)
-                                }
-
-                                val local = rotateLocal(
-                                    u = rawU,
-                                    v = rawV,
-                                    d = frontD + depthSign * layer,
-                                    pivotU = charCenterU,
-                                    pivotV = charVerticalBase,
-                                    pivotD = charDepthBase,
-                                    yawDegrees = charYaw,
-                                    pitchDegrees = charPitch,
-                                    rollDegrees = charRoll
-                                )
-                                result[toBlockPos(scene.transform(local.u, local.v, local.d))] = material
-                            }
-                        }
+                for (layer in charDepth - 1 downTo 0) {
+                    val material = when {
+                        layer < config.geometry.frontThicknessBlocks -> picker.front(cell, layer, outline)
+                        layer >= charDepth - config.geometry.backThicknessBlocks -> picker.back(cell, layer)
+                        else -> picker.side(cell, layer)
                     }
+
+                    val local = rotateLocal(
+                        u = rawU,
+                        v = rawV,
+                        d = frontD + depthSign * layer,
+                        pivotU = charCenterU,
+                        pivotV = charVerticalBase,
+                        pivotD = charDepthBase,
+                        yawDegrees = charYaw,
+                        pitchDegrees = charPitch,
+                        rollDegrees = charRoll
+                    )
+                    result[toBlockPos(scene.transform(local.u, local.v, local.d))] = material
                 }
             }
         }
@@ -94,6 +83,85 @@ class CaptchaLayout {
         }
 
         return result
+    }
+
+    private fun buildSurface(
+        pattern: List<String>,
+        font: CaptchaFont.ResolvedFont,
+        config: CaptchaConfig,
+        random: Random
+    ): SurfaceMask {
+        val original = LinkedHashSet<SurfaceCell>()
+
+        pattern.indices.forEach { visualRow ->
+            val row = if (config.geometry.mirrorVertical) font.height - 1 - visualRow else visualRow
+            pattern[row].indices.forEach { visualColumn ->
+                val column = if (config.geometry.mirrorHorizontal) font.width - 1 - visualColumn else visualColumn
+                if (pattern[row][column] != '1') return@forEach
+
+                for (pixelX in 0 until config.geometry.pixelWidth) {
+                    for (pixelY in 0 until config.geometry.pixelHeight) {
+                        original += SurfaceCell(
+                            x = visualColumn * config.geometry.pixelWidth + pixelX,
+                            y = visualRow * config.geometry.pixelHeight + pixelY
+                        )
+                    }
+                }
+            }
+        }
+
+        val outline = original.filterTo(LinkedHashSet()) { cell ->
+            CARDINAL.any { (dx, dy) -> SurfaceCell(cell.x + dx, cell.y + dy) !in original }
+        }
+
+        val fill = config.geometry.fill
+        if (fill.mode.equals("solid", ignoreCase = true) || fill.density >= 0.999 || original.size <= 2) {
+            return SurfaceMask(original, outline)
+        }
+
+        val retained = LinkedHashSet(original)
+        val originalComponents = componentCount(original)
+        val target = max(fill.minRetainedPixels, ceil(original.size * fill.density).toInt())
+            .coerceAtMost(original.size)
+
+        val shuffled = original.shuffled(random).sortedBy { it in outline }
+        for (candidate in shuffled) {
+            if (retained.size <= target) break
+
+            val degree = CARDINAL.count { (dx, dy) -> SurfaceCell(candidate.x + dx, candidate.y + dy) in retained }
+            if (fill.protectEndpoints && degree <= 1) continue
+            if (candidate in outline && random.nextDouble() * 100.0 < fill.outlinePreservePercent) continue
+
+            retained.remove(candidate)
+            if (fill.preserveConnectivity && componentCount(retained) > originalComponents) {
+                retained.add(candidate)
+            }
+        }
+
+        return SurfaceMask(retained, outline)
+    }
+
+    private fun componentCount(cells: Set<SurfaceCell>): Int {
+        if (cells.isEmpty()) return 0
+        val unseen = cells.toMutableSet()
+        var components = 0
+        val queue = ArrayDeque<SurfaceCell>()
+
+        while (unseen.isNotEmpty()) {
+            components++
+            val start = unseen.first()
+            unseen.remove(start)
+            queue.add(start)
+
+            while (queue.isNotEmpty()) {
+                val current = queue.removeFirst()
+                CARDINAL.forEach { (dx, dy) ->
+                    val next = SurfaceCell(current.x + dx, current.y + dy)
+                    if (unseen.remove(next)) queue.add(next)
+                }
+            }
+        }
+        return components
     }
 
     private fun addNoise(
@@ -130,12 +198,6 @@ class CaptchaLayout {
                 blocks.putIfAbsent(toBlockPos(scene.transform(u, v, d)), pick(config.noise.materials, random))
             }
         }
-    }
-
-    private fun accentedFront(base: String, config: CaptchaConfig, random: Random): String {
-        val accent = config.palette.accent
-        if (!accent.enabled || accent.chancePercent <= 0.0) return base
-        return if (random.nextDouble() * 100.0 < accent.chancePercent) pick(accent.group.materials, random) else base
     }
 
     private fun rotateLocal(
@@ -184,13 +246,6 @@ class CaptchaLayout {
         return LocalVec(pivotU + x, pivotV + y, pivotD + z)
     }
 
-    private fun materialFor(mode: String, materials: List<WeightedMaterial>, perCharacter: String, random: Random): String =
-        when (mode.lowercase()) {
-            "solid" -> materials.first().block
-            "per-character" -> perCharacter
-            else -> pick(materials, random)
-        }
-
     private fun pick(materials: List<WeightedMaterial>, random: Random): String {
         val totalWeight = materials.sumOf { it.weight }
         var cursor = random.nextInt(totalWeight)
@@ -222,5 +277,77 @@ class CaptchaLayout {
     private fun toBlockPos(vector: CaptchaScene.Vec3): BlockPos =
         BlockPos(vector.x.roundToInt(), vector.y.roundToInt(), vector.z.roundToInt())
 
+    private inner class CharacterMaterialPicker(
+        private val config: CaptchaConfig,
+        private val random: Random
+    ) {
+        private val mode = config.palette.mode.lowercase()
+        private val clusterSize = if (config.palette.clusterSizeMax <= config.palette.clusterSizeMin) {
+            config.palette.clusterSizeMin
+        } else {
+            random.nextInt(config.palette.clusterSizeMax - config.palette.clusterSizeMin + 1) + config.palette.clusterSizeMin
+        }
+        private val clusterDepth = max(1, clusterSize / 2)
+        private val clusters = HashMap<ClusterKey, String>()
+        private val perCharacterFront = pick(config.palette.front.materials, random)
+        private val perCharacterSide = pick(config.palette.side.materials, random)
+        private val perCharacterBack = pick(config.palette.back.materials, random)
+        private val perCharacterOutline = pick(config.palette.outline.group.materials, random)
+
+        fun front(cell: SurfaceCell, layer: Int, outline: Boolean): String {
+            if (outline && config.palette.outline.enabled &&
+                random.nextDouble() * 100.0 < config.palette.outline.chancePercent
+            ) {
+                return material("outline", config.palette.outline.group, perCharacterOutline, cell, layer)
+            }
+
+            val base = material("front", config.palette.front, perCharacterFront, cell, layer)
+            val accent = config.palette.accent
+            return if (accent.enabled && accent.chancePercent > 0.0 && random.nextDouble() * 100.0 < accent.chancePercent) {
+                pick(accent.group.materials, random)
+            } else {
+                base
+            }
+        }
+
+        fun side(cell: SurfaceCell, layer: Int): String =
+            material("side", config.palette.side, perCharacterSide, cell, layer)
+
+        fun back(cell: SurfaceCell, layer: Int): String =
+            material("back", config.palette.back, perCharacterBack, cell, layer)
+
+        private fun material(
+            role: String,
+            group: MaterialGroup,
+            perCharacter: String,
+            cell: SurfaceCell,
+            layer: Int
+        ): String = when (mode) {
+            "solid" -> group.materials.first().block
+            "per-character" -> perCharacter
+            "clustered" -> {
+                val key = ClusterKey(
+                    role = role,
+                    x = Math.floorDiv(cell.x, clusterSize),
+                    y = Math.floorDiv(cell.y, clusterSize),
+                    z = Math.floorDiv(layer, clusterDepth)
+                )
+                clusters.getOrPut(key) { pick(group.materials, random) }
+            }
+            else -> pick(group.materials, random)
+        }
+    }
+
+    private data class SurfaceMask(
+        val retained: Set<SurfaceCell>,
+        val originalOutline: Set<SurfaceCell>
+    )
+
+    private data class SurfaceCell(val x: Int, val y: Int)
+    private data class ClusterKey(val role: String, val x: Int, val y: Int, val z: Int)
     private data class LocalVec(val u: Double, val v: Double, val d: Double)
+
+    private companion object {
+        val CARDINAL = listOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1)
+    }
 }
