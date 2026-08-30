@@ -1,0 +1,115 @@
+# Mosaic Reference
+# Крупная удалённая CAPTCHA по мотивам референса: декоративный шрифт,
+# контролируемые пустоты, тёмный контур и смешанные glass/copper/deepslate блоки.
+
+scene:
+  distance-blocks: 42.0
+  center-height-blocks: 7.0
+  rotation:
+    yaw-degrees: 8.0
+    pitch-degrees: 0.0
+    roll-degrees: 0.0
+
+font:
+  preset: "ornate-9x12"
+
+geometry:
+  pixel-width: 1
+  pixel-height: 1
+  depth-blocks: 4
+  front-thickness-blocks: 1
+  back-thickness-blocks: 1
+  letter-gap-blocks: 2
+
+  fill:
+    mode: "porous"
+    density: 0.78
+    preserve-connectivity: true
+    protect-endpoints: true
+    outline-preserve-percent: 78.0
+    min-retained-pixels: 14
+
+randomness:
+  enabled: true
+  character:
+    horizontal-jitter-blocks: 0
+    vertical-jitter-blocks: 0
+    depth-jitter-blocks: 0
+    depth-variation-blocks: 0
+    rotation-yaw-jitter-degrees: 1.5
+    rotation-pitch-jitter-degrees: 0.75
+    rotation-roll-jitter-degrees: 0.5
+
+palette:
+  mode: "clustered"
+  cluster-size-min: 2
+  cluster-size-max: 5
+
+  front:
+    - block: "minecraft:cyan_stained_glass"
+      weight: 4
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 4
+    - block: "minecraft:blue_stained_glass"
+      weight: 3
+    - block: "minecraft:gray_stained_glass"
+      weight: 3
+    - block: "minecraft:cyan_terracotta"
+      weight: 3
+    - block: "minecraft:weathered_cut_copper"
+      weight: 2
+    - block: "minecraft:oxidized_cut_copper"
+      weight: 2
+    - block: "minecraft:polished_deepslate"
+      weight: 3
+
+  side:
+    - block: "minecraft:deepslate_tiles"
+      weight: 5
+    - block: "minecraft:polished_deepslate"
+      weight: 4
+    - block: "minecraft:blackstone"
+      weight: 3
+
+  back:
+    - block: "minecraft:blackstone"
+      weight: 5
+    - block: "minecraft:polished_blackstone"
+      weight: 3
+
+  accent:
+    enabled: true
+    chance-percent: 5.0
+    materials:
+      - block: "minecraft:cut_copper"
+        weight: 2
+      - block: "minecraft:weathered_cut_copper"
+        weight: 2
+
+  outline:
+    enabled: true
+    chance-percent: 86.0
+    materials:
+      - block: "minecraft:polished_deepslate"
+        weight: 5
+      - block: "minecraft:deepslate_tiles"
+        weight: 4
+      - block: "minecraft:blackstone"
+        weight: 3
+
+noise:
+  enabled: true
+  count: 5
+  cluster-size-min: 1
+  cluster-size-max: 2
+  horizontal-padding-blocks: 4
+  vertical-padding-blocks: 3
+  depth-min-blocks: 3
+  depth-max-blocks: 7
+  materials:
+    - block: "minecraft:gray_stained_glass"
+      weight: 5
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 3
+    - block: "minecraft:cyan_stained_glass"
+      weight: 2
