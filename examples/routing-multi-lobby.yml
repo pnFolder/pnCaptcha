@@ -1,0 +1,52 @@
+# Multi Lobby Routing
+# Пример сети из двух основных lobby и одного резервного backend.
+
+routing:
+  # least-players отправляет игрока на менее загруженный доступный lobby.
+  strategy: "least-players"
+
+  # Общий лимит сети. 0 отключает глобальный лимит.
+  network-max-players: 500
+
+  # Обычные игроки перестанут входить при 490/500.
+  network-reserve-slots: 10
+
+  # Игроки с permission смогут использовать резервные места.
+  full-bypass-permission: "pncaptcha.full.bypass"
+
+  # Не отправлять игрока на случайный сервер из velocity.toml,
+  # если все перечисленные ниже backend недоступны/заполнены.
+  fallback-to-any-registered: false
+
+  servers:
+    - name: "lobby-1"
+      enabled: true
+      priority: 10
+      weight: 5
+      max-players: 150
+      reserve-slots: 5
+
+    - name: "lobby-2"
+      enabled: true
+      priority: 10
+      weight: 5
+      max-players: 150
+      reserve-slots: 5
+
+    - name: "fallback"
+      enabled: true
+      priority: 100
+      weight: 1
+      max-players: 50
+      reserve-slots: 2
+
+# Альтернатива: priority
+# routing:
+#   strategy: "priority"
+# Тогда lobby-1/lobby-2 с priority=10 будут предпочтительнее fallback=100.
+#
+# Альтернатива: weighted-random
+# routing:
+#   strategy: "weighted-random"
+# Тогда weight=5 будет выбираться примерно в пять раз чаще weight=1,
+# если серверы проходят проверки capacity.
