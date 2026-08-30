@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ github.event.head_commit.message == 'release pnCaptcha 1.2.0' }}
+    if: ${{ startsWith(github.event.head_commit.message, 'release pnCaptcha 1.2.0') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
