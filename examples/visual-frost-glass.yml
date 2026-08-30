@@ -1,0 +1,94 @@
+# Frost Glass
+# Светлая холодная CAPTCHA из голубого/белого стекла с небольшим ледяным accent.
+
+scene:
+  distance-blocks: 40.0
+  center-height-blocks: 7.5
+  rotation:
+    yaw-degrees: 6.0
+    pitch-degrees: -1.0
+    roll-degrees: 0.0
+
+font:
+  preset: "ornate-9x12"
+
+geometry:
+  pixel-width: 1
+  pixel-height: 1
+  depth-blocks: 4
+  letter-gap-blocks: 3
+  fill:
+    mode: "porous"
+    density: 0.82
+    preserve-connectivity: true
+    protect-endpoints: true
+    outline-preserve-percent: 84.0
+    min-retained-pixels: 14
+
+palette:
+  mode: "clustered"
+  cluster-size-min: 2
+  cluster-size-max: 4
+
+  front:
+    - block: "minecraft:white_stained_glass"
+      weight: 4
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 6
+    - block: "minecraft:cyan_stained_glass"
+      weight: 3
+    - block: "minecraft:packed_ice"
+      weight: 2
+    - block: "minecraft:blue_ice"
+      weight: 1
+
+  side:
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 4
+    - block: "minecraft:blue_stained_glass"
+      weight: 3
+    - block: "minecraft:packed_ice"
+      weight: 2
+
+  back:
+    - block: "minecraft:blue_stained_glass"
+      weight: 4
+    - block: "minecraft:blue_ice"
+      weight: 2
+
+  accent:
+    enabled: true
+    chance-percent: 4.0
+    materials:
+      - block: "minecraft:sea_lantern"
+        weight: 2
+      - block: "minecraft:pearlescent_froglight"
+        weight: 1
+
+  outline:
+    enabled: true
+    chance-percent: 80.0
+    materials:
+      - block: "minecraft:blue_stained_glass"
+        weight: 4
+      - block: "minecraft:cyan_stained_glass"
+        weight: 3
+      - block: "minecraft:packed_ice"
+        weight: 2
+
+noise:
+  enabled: true
+  count: 7
+  cluster-size-min: 1
+  cluster-size-max: 2
+  horizontal-padding-blocks: 5
+  vertical-padding-blocks: 4
+  depth-min-blocks: 3
+  depth-max-blocks: 8
+  materials:
+    - block: "minecraft:white_stained_glass"
+      weight: 4
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 5
+    - block: "minecraft:cyan_stained_glass"
+      weight: 2

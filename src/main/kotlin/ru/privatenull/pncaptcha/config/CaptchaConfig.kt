@@ -89,7 +89,7 @@ data class CaptchaConfig(
         require(scene.rotationRollDegrees in -89.0..89.0)
 
         require(font.alphabet.isNotBlank())
-        require(font.preset.lowercase() in setOf("classic-5x7", "custom"))
+        require(font.preset.lowercase() in setOf("classic-5x7", "ornate-9x12", "custom"))
 
         require(geometry.pixelWidth in 1..8)
         require(geometry.pixelHeight in 1..8)
@@ -100,6 +100,10 @@ data class CaptchaConfig(
         require(geometry.letterGapBlocks in 0..24)
         require(geometry.letterRiseBlocks in -16.0..16.0)
         require(geometry.letterDepthStepBlocks in -16.0..16.0)
+        require(geometry.fill.mode.lowercase() in setOf("solid", "porous"))
+        require(geometry.fill.density in 0.35..1.0)
+        require(geometry.fill.outlinePreservePercent in 0.0..100.0)
+        require(geometry.fill.minRetainedPixels in 1..2048)
 
         require(randomness.seedMode.lowercase() in setOf("random", "fixed"))
         require(randomness.character.horizontalJitterBlocks in 0..12)
@@ -117,12 +121,16 @@ data class CaptchaConfig(
         require(randomness.scene.rotationPitchJitterDegrees in 0.0..45.0)
         require(randomness.scene.rotationRollJitterDegrees in 0.0..45.0)
 
-        require(palette.mode.lowercase() in setOf("per-block", "per-character", "solid"))
+        require(palette.mode.lowercase() in setOf("per-block", "per-character", "solid", "clustered"))
+        require(palette.clusterSizeMin in 1..32)
+        require(palette.clusterSizeMax in palette.clusterSizeMin..64)
         palette.front.requireValid("palette.front")
         palette.side.requireValid("palette.side")
         palette.back.requireValid("palette.back")
         require(palette.accent.chancePercent in 0.0..100.0)
         if (palette.accent.enabled) palette.accent.group.requireValid("palette.accent")
+        require(palette.outline.chancePercent in 0.0..100.0)
+        if (palette.outline.enabled) palette.outline.group.requireValid("palette.outline")
 
         require(noise.count in 0..8192)
         require(noise.horizontalPaddingBlocks in 0..64)
@@ -276,25 +284,25 @@ data class RecoveryConfig(
 )
 
 data class SceneConfig(
-    val distanceBlocks: Double = 30.0,
+    val distanceBlocks: Double = 42.0,
     val forwardYawDegrees: Double = 0.0,
     val lateralOffsetBlocks: Double = 0.0,
-    val centerHeightBlocks: Double = 8.0,
-    val rotationYawDegrees: Double = 28.0,
+    val centerHeightBlocks: Double = 7.0,
+    val rotationYawDegrees: Double = 8.0,
     val rotationPitchDegrees: Double = 0.0,
     val rotationRollDegrees: Double = 0.0
 )
 
 data class FontConfig(
-    val preset: String = "classic-5x7",
+    val preset: String = "ornate-9x12",
     val alphabet: String = "ABCDEFGHJKMNPQRSTUVWXYZ23456789",
     val customGlyphs: Map<Char, List<String>> = emptyMap()
 )
 
 data class GeometryConfig(
-    val pixelWidth: Int = 2,
-    val pixelHeight: Int = 2,
-    val depthBlocks: Int = 3,
+    val pixelWidth: Int = 1,
+    val pixelHeight: Int = 1,
+    val depthBlocks: Int = 4,
     val frontThicknessBlocks: Int = 1,
     val backThicknessBlocks: Int = 1,
     val letterGapBlocks: Int = 2,
@@ -303,7 +311,17 @@ data class GeometryConfig(
     val centerText: Boolean = true,
     val mirrorHorizontal: Boolean = false,
     val mirrorVertical: Boolean = false,
-    val extrudeTowardCamera: Boolean = false
+    val extrudeTowardCamera: Boolean = false,
+    val fill: FillConfig = FillConfig()
+)
+
+data class FillConfig(
+    val mode: String = "porous",
+    val density: Double = 0.78,
+    val preserveConnectivity: Boolean = true,
+    val protectEndpoints: Boolean = true,
+    val outlinePreservePercent: Double = 78.0,
+    val minRetainedPixels: Int = 14
 )
 
 data class RandomnessConfig(
@@ -316,12 +334,12 @@ data class RandomnessConfig(
 
 data class CharacterRandomnessConfig(
     val horizontalJitterBlocks: Int = 0,
-    val verticalJitterBlocks: Int = 1,
-    val depthJitterBlocks: Int = 1,
+    val verticalJitterBlocks: Int = 0,
+    val depthJitterBlocks: Int = 0,
     val depthVariationBlocks: Int = 0,
-    val rotationYawJitterDegrees: Double = 0.0,
-    val rotationPitchJitterDegrees: Double = 0.0,
-    val rotationRollJitterDegrees: Double = 0.0
+    val rotationYawJitterDegrees: Double = 1.5,
+    val rotationPitchJitterDegrees: Double = 0.75,
+    val rotationRollJitterDegrees: Double = 0.5
 )
 
 data class SceneRandomnessConfig(
@@ -329,43 +347,69 @@ data class SceneRandomnessConfig(
     val heightJitterBlocks: Double = 0.0,
     val lateralJitterBlocks: Double = 0.0,
     val forwardYawJitterDegrees: Double = 0.0,
-    val rotationYawJitterDegrees: Double = 2.0,
+    val rotationYawJitterDegrees: Double = 1.0,
     val rotationPitchJitterDegrees: Double = 0.0,
     val rotationRollJitterDegrees: Double = 0.0
 )
 
 data class PaletteConfig(
-    val mode: String = "per-block",
+    val mode: String = "clustered",
+    val clusterSizeMin: Int = 2,
+    val clusterSizeMax: Int = 5,
     val front: MaterialGroup = MaterialGroup(
         listOf(
-            WeightedMaterial("minecraft:polished_deepslate", 5),
+            WeightedMaterial("minecraft:cyan_stained_glass", 4),
+            WeightedMaterial("minecraft:light_blue_stained_glass", 4),
+            WeightedMaterial("minecraft:blue_stained_glass", 3),
+            WeightedMaterial("minecraft:gray_stained_glass", 3),
             WeightedMaterial("minecraft:cyan_terracotta", 3),
-            WeightedMaterial("minecraft:light_blue_terracotta", 2)
+            WeightedMaterial("minecraft:light_blue_terracotta", 2),
+            WeightedMaterial("minecraft:weathered_cut_copper", 2),
+            WeightedMaterial("minecraft:oxidized_cut_copper", 2),
+            WeightedMaterial("minecraft:polished_deepslate", 3)
         )
     ),
     val side: MaterialGroup = MaterialGroup(
         listOf(
             WeightedMaterial("minecraft:deepslate_tiles", 5),
-            WeightedMaterial("minecraft:deepslate_bricks", 3),
-            WeightedMaterial("minecraft:blackstone", 2)
+            WeightedMaterial("minecraft:polished_deepslate", 4),
+            WeightedMaterial("minecraft:blackstone", 3),
+            WeightedMaterial("minecraft:gray_stained_glass", 2),
+            WeightedMaterial("minecraft:oxidized_cut_copper", 1)
         )
     ),
     val back: MaterialGroup = MaterialGroup(
         listOf(
-            WeightedMaterial("minecraft:blackstone", 4),
-            WeightedMaterial("minecraft:polished_blackstone", 2)
+            WeightedMaterial("minecraft:blackstone", 5),
+            WeightedMaterial("minecraft:polished_blackstone", 3),
+            WeightedMaterial("minecraft:deepslate_tiles", 2)
         )
     ),
-    val accent: AccentConfig = AccentConfig()
+    val accent: AccentConfig = AccentConfig(),
+    val outline: OutlineConfig = OutlineConfig()
 )
 
 data class AccentConfig(
     val enabled: Boolean = true,
-    val chancePercent: Double = 8.0,
+    val chancePercent: Double = 5.0,
     val group: MaterialGroup = MaterialGroup(
         listOf(
-            WeightedMaterial("minecraft:sea_lantern", 1),
-            WeightedMaterial("minecraft:verdant_froglight", 1)
+            WeightedMaterial("minecraft:cut_copper", 2),
+            WeightedMaterial("minecraft:weathered_cut_copper", 2),
+            WeightedMaterial("minecraft:oxidized_cut_copper", 1)
+        )
+    )
+)
+
+data class OutlineConfig(
+    val enabled: Boolean = true,
+    val chancePercent: Double = 86.0,
+    val group: MaterialGroup = MaterialGroup(
+        listOf(
+            WeightedMaterial("minecraft:polished_deepslate", 5),
+            WeightedMaterial("minecraft:deepslate_tiles", 4),
+            WeightedMaterial("minecraft:blackstone", 3),
+            WeightedMaterial("minecraft:gray_stained_glass", 2)
         )
     )
 )
@@ -388,17 +432,18 @@ data class WeightedMaterial(
 
 data class NoiseConfig(
     val enabled: Boolean = true,
-    val count: Int = 10,
+    val count: Int = 5,
     val horizontalPaddingBlocks: Int = 4,
     val verticalPaddingBlocks: Int = 3,
     val depthMinBlocks: Int = 3,
-    val depthMaxBlocks: Int = 8,
+    val depthMaxBlocks: Int = 7,
     val clusterSizeMin: Int = 1,
     val clusterSizeMax: Int = 2,
     val materials: List<WeightedMaterial> = listOf(
         WeightedMaterial("minecraft:gray_stained_glass", 5),
-        WeightedMaterial("minecraft:light_blue_stained_glass", 2),
-        WeightedMaterial("minecraft:cyan_stained_glass", 1)
+        WeightedMaterial("minecraft:light_blue_stained_glass", 3),
+        WeightedMaterial("minecraft:cyan_stained_glass", 2),
+        WeightedMaterial("minecraft:blue_stained_glass", 1)
     )
 )
 

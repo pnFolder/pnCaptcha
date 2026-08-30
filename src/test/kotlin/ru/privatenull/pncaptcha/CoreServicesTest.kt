@@ -13,7 +13,9 @@ import ru.privatenull.pncaptcha.captcha.CaptchaLayout
 import ru.privatenull.pncaptcha.captcha.CaptchaScene
 import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
+import ru.privatenull.pncaptcha.config.FillConfig
 import ru.privatenull.pncaptcha.config.FontConfig
+import ru.privatenull.pncaptcha.config.GeometryConfig
 import ru.privatenull.pncaptcha.config.NoiseConfig
 import ru.privatenull.pncaptcha.config.RandomnessConfig
 import ru.privatenull.pncaptcha.config.SceneConfig
@@ -46,6 +48,15 @@ class CoreServicesTest {
     }
 
     @Test
+    fun `ornate font exposes detailed nine by twelve glyphs`() {
+        val resolved = CaptchaFont.resolve(FontConfig(preset = "ornate-9x12"))
+        assertEquals(9, resolved.width)
+        assertEquals(12, resolved.height)
+        assertTrue(resolved.pattern('B').sumOf { row -> row.count { it == '1' } } > 20)
+        assertTrue(resolved.pattern('9').sumOf { row -> row.count { it == '1' } } > 20)
+    }
+
+    @Test
     fun `custom font can replace built in font`() {
         val custom = FontConfig(
             preset = "custom",
@@ -70,6 +81,7 @@ class CoreServicesTest {
                 rotationPitchDegrees = 8.0,
                 rotationRollDegrees = 5.0
             ),
+            geometry = GeometryConfig(fill = FillConfig(mode = "solid")),
             randomness = RandomnessConfig(enabled = false),
             noise = NoiseConfig(enabled = false)
         )
@@ -82,7 +94,7 @@ class CoreServicesTest {
         assertEquals(frame.keys.size, frame.size)
         assertTrue(frame.keys.map { it.x }.distinct().size > 10)
         assertTrue(frame.keys.map { it.y }.distinct().size > 10)
-        assertTrue(frame.keys.map { it.z }.distinct().size > 10)
+        assertTrue(frame.keys.map { it.z }.distinct().size > 3)
 
         val bounds = CaptchaScene.chunkBounds(config, scene, font)
         assertTrue(bounds.maxZ >= bounds.minZ)
@@ -90,14 +102,55 @@ class CoreServicesTest {
     }
 
     @Test
-    fun `default yaml includes documented bossbar actions`(@TempDir tempDir: Path) {
+    fun `porous fill removes voxels while preserving readable structure`() {
+        val base = CaptchaConfig(
+            geometry = GeometryConfig(
+                depthBlocks = 4,
+                fill = FillConfig(mode = "solid")
+            ),
+            randomness = RandomnessConfig(enabled = false),
+            noise = NoiseConfig(enabled = false)
+        )
+        val porous = base.copy(
+            geometry = base.geometry.copy(
+                fill = FillConfig(
+                    mode = "porous",
+                    density = 0.65,
+                    preserveConnectivity = true,
+                    protectEndpoints = true,
+                    outlinePreservePercent = 25.0,
+                    minRetainedPixels = 10
+                )
+            )
+        )
+        val font = CaptchaFont.resolve(base.font)
+        val scene = CaptchaScene.resolve(base, Random(7))
+        val solidFrame = CaptchaLayout().build("B39", base, font, scene, Random(7))
+        val porousFrame = CaptchaLayout().build("B39", porous, font, scene, Random(7))
+
+        assertTrue(porousFrame.isNotEmpty())
+        assertTrue(porousFrame.size < solidFrame.size)
+        assertTrue(porousFrame.size > solidFrame.size / 3)
+    }
+
+    @Test
+    fun `default yaml includes documented mosaic and bossbar settings`(@TempDir tempDir: Path) {
         val config = CaptchaConfigLoader.load(tempDir)
+        val text = Files.readString(tempDir.resolve("config.yml"))
+
         assertTrue(tempDir.resolve("config.yml").toFile().isFile)
-        assertEquals(30.0, config.scene.distanceBlocks)
-        assertEquals(28.0, config.scene.rotationYawDegrees)
-        assertEquals(2, config.geometry.pixelWidth)
-        assertEquals(3, config.geometry.depthBlocks)
+        assertEquals(42.0, config.scene.distanceBlocks)
+        assertEquals(8.0, config.scene.rotationYawDegrees)
+        assertEquals("ornate-9x12", config.font.preset)
+        assertEquals(1, config.geometry.pixelWidth)
+        assertEquals(4, config.geometry.depthBlocks)
+        assertEquals("porous", config.geometry.fill.mode)
+        assertEquals("clustered", config.palette.mode)
         assertTrue(config.palette.front.materials.isNotEmpty())
+        assertTrue(config.palette.outline.enabled)
+        assertTrue(text.contains("FILL — ПЛОТНЫЕ ИЛИ КОНТРОЛИРУЕМО"))
+        assertTrue(text.contains("cluster-size-min"))
+        assertTrue(text.contains("БЫСТРЫЙ ВОЗВРАТ"))
 
         val startBossBar = config.actions.triggers["challenge-start"].orEmpty()
             .first { it.type == "bossbar" }

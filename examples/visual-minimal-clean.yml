@@ -1,0 +1,64 @@
+# Minimal Clean
+# Максимально чистая сцена без noise и почти без рандомности.
+# Удобно для диагностики геометрии, расстояния и собственного шрифта.
+
+scene:
+  distance-blocks: 38.0
+  center-height-blocks: 7.0
+  rotation:
+    yaw-degrees: 5.0
+    pitch-degrees: 0.0
+    roll-degrees: 0.0
+
+font:
+  preset: "ornate-9x12"
+
+geometry:
+  pixel-width: 1
+  pixel-height: 1
+  depth-blocks: 3
+  front-thickness-blocks: 1
+  back-thickness-blocks: 1
+  letter-gap-blocks: 3
+  fill:
+    mode: "solid"
+    density: 1.0
+    preserve-connectivity: true
+    protect-endpoints: true
+    outline-preserve-percent: 100.0
+    min-retained-pixels: 14
+
+randomness:
+  enabled: false
+  seed-mode: "fixed"
+  fixed-seed: 1337
+
+palette:
+  mode: "solid"
+  cluster-size-min: 1
+  cluster-size-max: 1
+  front:
+    - block: "minecraft:cyan_terracotta"
+      weight: 1
+  side:
+    - block: "minecraft:deepslate_tiles"
+      weight: 1
+  back:
+    - block: "minecraft:blackstone"
+      weight: 1
+  accent:
+    enabled: false
+    chance-percent: 0.0
+    materials:
+      - block: "minecraft:sea_lantern"
+        weight: 1
+  outline:
+    enabled: false
+    chance-percent: 0.0
+    materials:
+      - block: "minecraft:polished_deepslate"
+        weight: 1
+
+noise:
+  enabled: false
+  count: 0

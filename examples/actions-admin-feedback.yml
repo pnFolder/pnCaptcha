@@ -1,0 +1,100 @@
+# Action Feedback Showcase
+# Примеры разных типов Actions. Это демонстрация возможностей, а не обязательные defaults.
+
+actions:
+  enabled: true
+
+  triggers:
+    challenge-start:
+      - type: "message"
+        lines:
+          - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          - "<aqua>Привет, <white>{player}</white>.</aqua>"
+          - "<gray>Введи код перед собой. Время: <white>{timeout}s</white>.</gray>"
+          - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - type: "title"
+        title: "<gradient:#55ddff:#8b5cf6><bold>pnCaptcha</bold></gradient>"
+        subtitle: "<gray>Подтверди, что ты человек</gray>"
+        fade-in-ms: 200
+        stay-ms: 1400
+        fade-out-ms: 300
+
+      - type: "sound"
+        sound: "minecraft:block.amethyst_block.chime"
+        source: "master"
+        volume: 0.7
+        sound-pitch: 1.1
+
+    wrong-answer:
+      - type: "actionbar"
+        text: "<red>Неверно</red> <dark_gray>• <white>{remaining}</white> <gray>попыток осталось</gray>"
+
+      - type: "sound"
+        sound: "minecraft:block.note_block.bass"
+        source: "master"
+        volume: 0.8
+        sound-pitch: 0.65
+
+      # 20% шанс дополнительного звука.
+      - type: "sound"
+        chance-percent: 20.0
+        sound: "minecraft:entity.enderman.stare"
+        source: "master"
+        volume: 0.35
+        sound-pitch: 1.4
+
+    passed:
+      - type: "title"
+        title: "<green><bold>Готово</bold></green>"
+        subtitle: "<gray>Маршрут: <white>{server}</white></gray>"
+        fade-in-ms: 100
+        stay-ms: 800
+        fade-out-ms: 200
+
+      - type: "sound"
+        sound: "minecraft:entity.player.levelup"
+        source: "master"
+        volume: 0.7
+        sound-pitch: 1.2
+
+      # Пример console command. Команда зависит от установленных Velocity-плагинов.
+      # - type: "command"
+      #   command: "alert {player} прошёл pnCaptcha"
+
+    rate-limited:
+      - type: "disconnect"
+        lines:
+          - "<red><bold>Слишком много подключений</bold></red>"
+          - "<gray>Попробуй снова немного позже.</gray>"
+
+    network-full:
+      - type: "disconnect"
+        text: "<red>Сеть заполнена. Попробуй позже.</red>"
+
+# Ещё примеры:
+#
+# Выполнить Action только для permission:
+# - type: "title"
+#   permission: "pncaptcha.vip"
+#   title: "<gold>VIP verification</gold>"
+#
+# Телепорт внутри Limbo:
+# - type: "teleport"
+#   x: 0.5
+#   y: 70.0
+#   z: 0.5
+#   yaw: 180.0
+#   pitch: 0.0
+#
+# Изменить GameMode:
+# - type: "gamemode"
+#   game-mode: "adventure"
+#
+# Подключить к конкретному серверу:
+# - type: "connect"
+#   server: "queue"
+#
+# Подключить через configured router:
+# - type: "connect"
+#   server: "@route"

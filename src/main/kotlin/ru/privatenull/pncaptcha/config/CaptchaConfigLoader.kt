@@ -140,7 +140,15 @@ object CaptchaConfigLoader {
                 centerText = root.bool("geometry.center-text", defaults.geometry.centerText),
                 mirrorHorizontal = root.bool("geometry.mirror-horizontal", defaults.geometry.mirrorHorizontal),
                 mirrorVertical = root.bool("geometry.mirror-vertical", defaults.geometry.mirrorVertical),
-                extrudeTowardCamera = root.bool("geometry.extrude-toward-camera", defaults.geometry.extrudeTowardCamera)
+                extrudeTowardCamera = root.bool("geometry.extrude-toward-camera", defaults.geometry.extrudeTowardCamera),
+                fill = FillConfig(
+                    mode = root.string("geometry.fill.mode", defaults.geometry.fill.mode),
+                    density = root.double("geometry.fill.density", defaults.geometry.fill.density),
+                    preserveConnectivity = root.bool("geometry.fill.preserve-connectivity", defaults.geometry.fill.preserveConnectivity),
+                    protectEndpoints = root.bool("geometry.fill.protect-endpoints", defaults.geometry.fill.protectEndpoints),
+                    outlinePreservePercent = root.double("geometry.fill.outline-preserve-percent", defaults.geometry.fill.outlinePreservePercent),
+                    minRetainedPixels = root.int("geometry.fill.min-retained-pixels", defaults.geometry.fill.minRetainedPixels)
+                )
             ),
             randomness = RandomnessConfig(
                 enabled = root.bool("randomness.enabled", defaults.randomness.enabled),
@@ -167,6 +175,8 @@ object CaptchaConfigLoader {
             ),
             palette = PaletteConfig(
                 mode = root.string("palette.mode", defaults.palette.mode),
+                clusterSizeMin = root.int("palette.cluster-size-min", defaults.palette.clusterSizeMin),
+                clusterSizeMax = root.int("palette.cluster-size-max", defaults.palette.clusterSizeMax),
                 front = MaterialGroup(root.weightedMaterials("palette.front", defaults.palette.front.materials)),
                 side = MaterialGroup(root.weightedMaterials("palette.side", defaults.palette.side.materials)),
                 back = MaterialGroup(root.weightedMaterials("palette.back", defaults.palette.back.materials)),
@@ -174,6 +184,11 @@ object CaptchaConfigLoader {
                     enabled = root.bool("palette.accent.enabled", defaults.palette.accent.enabled),
                     chancePercent = root.double("palette.accent.chance-percent", defaults.palette.accent.chancePercent),
                     group = MaterialGroup(root.weightedMaterials("palette.accent.materials", defaults.palette.accent.group.materials))
+                ),
+                outline = OutlineConfig(
+                    enabled = root.bool("palette.outline.enabled", defaults.palette.outline.enabled),
+                    chancePercent = root.double("palette.outline.chance-percent", defaults.palette.outline.chancePercent),
+                    group = MaterialGroup(root.weightedMaterials("palette.outline.materials", defaults.palette.outline.group.materials))
                 )
             ),
             noise = NoiseConfig(
