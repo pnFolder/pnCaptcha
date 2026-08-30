@@ -207,4 +207,8 @@ BossBar-анимация дополнительно даёт `{bossbar_progress}
 gradle clean build
 ```
 
-Пока feature-ветка не выпущена отдельным релизом, project version остаётся текущей стабильной версией. Финальное имя release-JAR будет приведено к pnFolder Release Authoring Contract только после утверждения релиза.
+Готовый официальный shaded JAR:
+
+```text
+build/libs/pnCaptcha-1.2.0-velocity-java21.jar
+```
