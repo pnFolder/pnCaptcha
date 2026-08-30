@@ -1,19 +1,18 @@
 # =============================================================================
-# pnCaptcha 1.1.0 — полная конфигурация
+# pnCaptcha — полная конфигурация
 # =============================================================================
-# Этот файл специально сделан как встроенная документация.
-# Идея: администратор должен понять любую настройку прямо здесь, без чтения исходников.
+# Этот файл одновременно является конфигом и встроенной документацией.
+# Любая новая возможность должна быть понятна прямо отсюда: что она делает,
+# какие значения принимает и как выглядит рабочий пример.
 #
 # ВАЖНО:
 # - После изменения config.yml полностью перезапусти Velocity.
-# - При несовместимом config-version pnCaptcha сохранит старый файл как backup
-#   и создаст новый config.yml со всеми актуальными комментариями.
-# - Все Minecraft-блоки и звуки указываются через namespace, например:
+# - При несовместимом config-version pnCaptcha сохраняет старый файл как backup
+#   и создаёт новый config.yml со всеми актуальными комментариями.
+# - Minecraft-блоки и звуки указываются через namespace:
 #     minecraft:polished_deepslate
 #     minecraft:entity.player.levelup
-# - MiniMessage поддерживается в messages.* и текстовых Actions:
-#     <red>, <#55ddff>, <bold>, <gradient:#55ddff:#8b5cf6>
-#     <hover:show_text:'...'>, <click:open_url:'...'>
+# - MiniMessage поддерживается в messages.* и текстовых Actions.
 #
 # Основные placeholders Actions:
 #   {player}    — ник игрока
@@ -24,15 +23,28 @@
 #   {max}       — максимум попыток
 #   {remaining} — сколько попыток осталось
 #   {timeout}   — общий timeout CAPTCHA в секундах
-#   {reason}    — причина события, например recovery
+#   {reason}    — причина события
 #   {server}    — выбранный backend
 #   {captcha}   — текущий ответ CAPTCHA; не показывай обычным игрокам
 #
-# Дополнительные placeholders BossBar-анимации:
-#   {bossbar_progress} — значение 0.000..1.000
-#   {bossbar_percent}  — значение 0..100
-#   {bossbar_seconds}  — сколько секунд осталось до конца анимации
-#   {bossbar_millis}   — сколько миллисекунд осталось
+# BossBar placeholders:
+#   {bossbar_progress} — 0.000..1.000
+#   {bossbar_percent}  — 0..100
+#   {bossbar_seconds}  — секунд до конца анимации
+#   {bossbar_millis}   — миллисекунд до конца анимации
+#
+# -----------------------------------------------------------------------------
+# БЫСТРЫЙ ОТКАТ ВИЗУАЛА К БОЛЕЕ СТАРОМУ ПЛОТНОМУ СТИЛЮ
+# -----------------------------------------------------------------------------
+# Если новый mosaic-стиль не подходит, не нужно менять код. Достаточно:
+#   font.preset: "classic-5x7"
+#   scene.distance-blocks: 30.0
+#   scene.rotation.yaw-degrees: 28.0
+#   geometry.pixel-width: 2
+#   geometry.pixel-height: 2
+#   geometry.depth-blocks: 3
+#   geometry.fill.mode: "solid"
+#   palette.mode: "per-block"
 # =============================================================================
 config-version: 3
 
@@ -40,97 +52,59 @@ config-version: 3
 # ОБЩАЯ ЛОГИКА CAPTCHA
 # =============================================================================
 general:
-  # Сколько символов будет в коде.
-  # Допустимо: 3..12.
+  # Количество символов. Допустимо: 3..12.
   # Пример: 5 -> "K7M2P".
   captcha-length: 5
 
-  # Сколько неправильных ответов разрешено до exhausted.
-  # Допустимо: 1..20.
+  # Неверных ответов до exhausted. Допустимо: 1..20.
   max-attempts: 3
 
-  # Сколько секунд игрок может находиться в CAPTCHA Limbo.
-  # Допустимо: 5..600.
-  # Это же значение можно автоматически использовать BossBar-таймером.
+  # Общий timeout Limbo в секундах. Допустимо: 5..600.
   timeout-seconds: 30
 
   # Сколько минут помнить успешно проверенную пару UUID+IP.
-  # Пока запись жива, повторная CAPTCHA не показывается.
   # 720 = 12 часов.
   verified-cache-minutes: 720
 
   input:
-    # true  -> aBc12 и ABC12 считаются разными ответами.
-    # false -> регистр игнорируется.
+    # true -> регистр важен; false -> aBc12 равно ABC12.
     case-sensitive: false
 
-    # Удалять пробелы в начале и конце ввода.
-    # Пример: "  ABC12  " -> "ABC12".
+    # Удалять пробелы по краям ответа.
     trim: true
 
-    # Удалять любые пробельные символы внутри ответа.
-    # Пример: "A B C 1 2" -> "ABC12".
+    # Удалять пробелы внутри ответа: "A B C" -> "ABC".
     remove-spaces: true
 
-    # Максимальная длина сообщения, которое вообще рассматривается как ответ.
-    # Защищает от огромного мусорного ввода.
+    # Сообщения длиннее этого значения не считаются ответом CAPTCHA.
     max-length: 32
 
 # =============================================================================
-# МАРШРУТИЗАЦИЯ ПОСЛЕ УСПЕШНОЙ ПРОВЕРКИ
+# МАРШРУТИЗАЦИЯ ПОСЛЕ ПРОВЕРКИ
 # =============================================================================
 routing:
-  # Как выбрать backend из списка servers.
-  # Доступно:
-  #   priority        — сервер с минимальным priority.
-  #   least-players   — сервер с наименьшим текущим онлайном.
-  #   random          — случайный доступный сервер.
-  #   weighted-random — случайно с учётом weight.
-  #   round-robin     — по очереди.
-  #   first-available — первый доступный по порядку конфига.
-  #
-  # Для сети с несколькими lobby обычно удобно least-players.
+  # priority | least-players | random | weighted-random | round-robin | first-available
   strategy: "least-players"
 
-  # Общий лимит игроков на всей Velocity-сети.
-  # 0 = pnCaptcha не применяет общий лимит.
-  # Пример: 500 ограничит сеть 500 игроками с учётом reserve-slots.
+  # Общий лимит сети. 0 = не ограничивать.
   network-max-players: 0
 
-  # Сколько мест общего лимита оставить зарезервированными.
-  # Пример: max=500, reserve=10 -> обычные игроки перестанут входить при 490.
+  # Резерв внутри общего лимита.
   network-reserve-slots: 0
 
-  # Permission, позволяющий использовать зарезервированные места общего лимита.
-  # Пустая строка = bypass отключён.
+  # Permission для использования зарезервированных мест.
   full-bypass-permission: "pncaptcha.full.bypass"
 
-  # true = если ни один сервер из списка ниже не подходит,
-  # pnCaptcha попробует любой RegisteredServer из velocity.toml.
-  # false = использовать только явно перечисленные серверы.
+  # true = при отсутствии подходящего сервера из списка разрешить любой
+  # RegisteredServer из velocity.toml.
   fallback-to-any-registered: false
 
-  # Серверов может быть сколько угодно.
-  # ВАЖНО: name должен точно совпадать с именем сервера в velocity.toml.
   servers:
     - name: "lobby"
-
-      # Можно временно исключить сервер из выбора, не удаляя его из конфига.
       enabled: true
-
-      # Чем меньше число, тем выше приоритет для стратегии priority.
       priority: 10
-
-      # Вес для weighted-random.
-      # Пример: weight 10 примерно в 10 раз вероятнее, чем weight 1.
       weight: 5
-
-      # Собственный лимит этого backend.
-      # 0 = pnCaptcha не ограничивает сервер.
       max-players: 0
-
-      # Сколько слотов этого backend оставить свободными.
-      # Пример: max=150, reserve=5 -> обычный выбор прекратится на 145.
       reserve-slots: 0
 
     # Пример второго lobby:
@@ -141,583 +115,389 @@ routing:
     #   max-players: 150
     #   reserve-slots: 5
 
-    # Пример fallback-сервера с низким приоритетом:
-    # - name: "fallback"
-    #   enabled: true
-    #   priority: 100
-    #   weight: 1
-    #   max-players: 50
-    #   reserve-slots: 2
-
 # =============================================================================
 # ЗАЩИТА ОТ СПАМА ПОДКЛЮЧЕНИЙ
 # =============================================================================
 security:
-  # Сколько новых входов с одного IP разрешено внутри join-window-seconds.
+  # Сколько новых входов с одного IP разрешено внутри окна ниже.
   max-joins-per-window: 6
 
-  # Размер окна IP rate-limit в секундах.
+  # Размер окна rate-limit в секундах.
   join-window-seconds: 10
 
   # Максимум одновременно существующих персональных CAPTCHA VirtualWorld.
-  # Ограничивает расход памяти при бот-флуде.
   max-active-captchas: 128
 
-  # Игрок с этим permission полностью пропускает CAPTCHA.
-  # Пустая строка = bypass отключён.
+  # Игрок с permission полностью пропускает CAPTCHA.
   bypass-permission: "pncaptcha.bypass"
 
 # =============================================================================
 # BSTATS
 # =============================================================================
 metrics:
-  # Локально включает/выключает bStats для pnCaptcha.
-  # Глобальный opt-out bStats владельца сервера всё равно имеет приоритет.
+  # Локальный переключатель метрик pnCaptcha.
+  # Глобальный plugins/bStats/config.txt всё равно имеет приоритет.
   enabled: true
 
-  # Отправлять агрегированные custom charts: strategy, количество route-серверов,
-  # длина CAPTCHA, глубина voxel, включённые Actions и т.п.
-  # IP, UUID, ответы CAPTCHA и сообщения игроков не отправляются.
+  # Агрегированные custom charts. IP/UUID/ответы CAPTCHA не отправляются.
   custom-charts: true
 
 # =============================================================================
-# ПРОВЕРКА ОБНОВЛЕНИЙ
+# ОБНОВЛЕНИЯ
 # =============================================================================
 updates:
-  # Главный переключатель update checker.
   enabled: true
-
-  # Проверять новый GitHub Release при старте Velocity.
   check-on-startup: true
-
-  # Задержка проверки после запуска, чтобы не мешать startup.
   startup-delay-seconds: 2
-
-  # GitHub repository в формате owner/repository.
   repository: "pnFolder/pnCaptcha"
-
-  # HTTP timeout запроса к GitHub.
   request-timeout-seconds: 5
-
-  # Печатать найденное обновление в консоль.
   notify-console: true
-
-  # Показывать обновление вошедшим администраторам.
   notify-players: true
-
-  # Permission для уведомления об обновлении.
   notify-permission: "pncaptcha.admin"
-
-  # true = также писать, что текущая версия уже последняя.
   announce-up-to-date: true
 
 # =============================================================================
 # LIMBO WORLD
 # =============================================================================
 limbo:
-  # Базовая view distance персонального Limbo.
-  # Большая CAPTCHA может автоматически увеличить её ниже.
+  # Базовая view distance. Для далёкой mosaic CAPTCHA auto-expand обычно
+  # автоматически поднимет фактическое значение.
   view-distance: 10
 
-  # Simulation distance Limbo. Никогда не будет выше фактической view distance.
   simulation-distance: 8
 
-  # Автоматически увеличивать view distance, если геометрия CAPTCHA ушла далеко.
+  # Автоматически расширять view distance по фактическим границам объекта.
   auto-expand-view-distance: true
 
-  # Верхний предел автоматического расширения.
+  # Максимум автоматического расширения. Допустимо 2..32.
   max-auto-view-distance: 16
 
-  # Сколько дополнительных чанков предварительно создать вокруг CAPTCHA.
-  # Полезно для больших углов, noise и далёких сцен.
+  # Дополнительные чанки вокруг CAPTCHA, создаваемые до входа игрока.
   precreate-padding-chunks: 1
 
-  # true уменьшает часть debug-информации Minecraft-клиента.
   reduced-debug-info: false
 
-  # Время виртуального мира 0..24000.
   # 0 = рассвет, 6000 = день, 12000 = закат, 18000 = ночь.
   world-time-ticks: 6000
 
-  # Разрешить обычное падение/гравитацию в Limbo.
-  # recovery.enabled также требует реального движения игрока.
+  # Разрешить реальное падение. Recovery также использует движение игрока.
   falling-enabled: true
 
   light:
-    # Уровень sky light 0..15.
     sky: 15
-
-    # Уровень block light 0..15.
     block: 15
 
   pedestal:
-    # Создавать физическую виртуальную платформу под spawn игрока.
     enabled: true
-
-    # Материал платформы.
     block: "minecraft:deepslate_tiles"
-
-    # Размер платформы по X.
-    # 1 = один блок, 3 = ширина три блока.
     size-x: 1
-
-    # Размер платформы по Z.
     size-z: 1
-
-    # Смещение платформы относительно Y spawn.
-    # -1 = прямо под ногами.
     y-offset: -1
 
 # =============================================================================
 # ИГРОК, SPAWN, КАМЕРА И RECOVERY
 # =============================================================================
 player:
-  # Режим игрока внутри Limbo: creative | adventure | survival | spectator.
+  # creative | adventure | survival | spectator
   game-mode: "creative"
 
-  # true = не позволять отойти дальше lock-radius-blocks от точки spawn.
+  # true = ограничивать перемещение вокруг spawn.
   lock-position: false
-
-  # Радиус разрешённого движения при lock-position: true.
   lock-radius-blocks: 1.5
 
   spawn:
-    # Точная координата X игрока в персональном VirtualWorld.
     x: 0.5
-
-    # Точная координата Y.
     y: 65.0
-
-    # Точная координата Z.
     z: 0.5
 
   camera:
-    # true = pnCaptcha сам рассчитывает yaw/pitch на центр 3D CAPTCHA.
-    # false = использовать yaw-degrees и pitch-degrees вручную.
+    # true = автоматически смотреть в центр CAPTCHA.
     auto-aim: true
-
-    # Ручной yaw при auto-aim: false.
     yaw-degrees: 0.0
-
-    # Ручной pitch при auto-aim: false.
     pitch-degrees: 0.0
-
-    # Дополнительный yaw поверх автоматически рассчитанного направления.
     yaw-offset-degrees: 0.0
-
-    # Дополнительный pitch поверх автоматически рассчитанного направления.
     pitch-offset-degrees: 0.0
 
   recovery:
-    # Автоматически возвращать игрока на spawn при выходе за разрешённую область.
     enabled: true
-
-    # Если игрок опустился ниже spawn на N блоков — вернуть его назад.
-    # 0 = конкретная проверка отключена.
     below-spawn-blocks: 8.0
-
-    # Если игрок поднялся выше spawn на N блоков — вернуть его назад.
-    # 0 = конкретная проверка отключена.
     above-spawn-blocks: 40.0
-
-    # Максимальная горизонтальная дистанция от spawn.
-    # 0 = проверка отключена.
     max-horizontal-distance-blocks: 48.0
-
-    # Минимальный интервал между recovery-телепортами.
     cooldown-millis: 500
-
-    # true = после recovery сохранить текущий yaw/pitch игрока.
-    # false = снова направить игрока на CAPTCHA.
     preserve-current-look: false
-
-    # Показывать стандартное messages.recovered.
-    # Actions trigger recovery работает независимо от этой настройки.
     send-message: true
 
 # =============================================================================
 # ПОЛОЖЕНИЕ И УГОЛ ВСЕЙ 3D CAPTCHA
 # =============================================================================
 scene:
-  # Расстояние центра CAPTCHA от игрока в блоках.
-  distance-blocks: 30.0
+  # Mosaic-стиль расположен дальше старого пресета. Это позволяет сделать
+  # символы крупными и детализированными, но целиком оставить строку в кадре.
+  # Рекомендуемый диапазон для reference-style: 36..48.
+  distance-blocks: 42.0
 
-  # Направление, куда вынесен весь объект относительно игрока:
-  #   0   = +Z
-  #   90  = -X
-  #  -90  = +X
-  #   180 = -Z
+  # Направление от игрока: 0=+Z, 90=-X, -90=+X, 180=-Z.
   forward-yaw-degrees: 0.0
 
-  # Сдвиг всей CAPTCHA влево/вправо относительно направления forward-yaw.
+  # Боковой сдвиг всей строки.
   lateral-offset-blocks: 0.0
 
-  # Высота центра CAPTCHA относительно позиции игрока.
-  center-height-blocks: 8.0
+  # Высота центра относительно spawn игрока.
+  center-height-blocks: 7.0
 
   rotation:
-    # Разворот самой конструкции влево/вправо.
-    # Именно этот параметр создаёт выраженный боковой 3D-ракурс.
-    yaw-degrees: 28.0
-
-    # Наклон верхней части вперёд/назад.
+    # Небольшой общий yaw сохраняет 3D-глубину, но не превращает буквы
+    # в сильно диагональный объект. Для старого ракурса можно вернуть 28.
+    yaw-degrees: 8.0
     pitch-degrees: 0.0
-
-    # Диагональный завал всей надписи.
     roll-degrees: 0.0
 
 # =============================================================================
 # ШРИФТ
 # =============================================================================
 font:
-  # classic-5x7 = встроенный читаемый bitmap-шрифт.
-  # custom      = использовать custom-glyphs ниже.
-  preset: "classic-5x7"
+  # Доступно:
+  #   ornate-9x12 — новый крупный декоративный шрифт с более сложными формами
+  #                 и засечками; рассчитан на mosaic/porous стиль.
+  #   classic-5x7 — прежний компактный читаемый bitmap-шрифт.
+  #   custom      — собственные glyph из custom-glyphs.
+  preset: "ornate-9x12"
 
-  # Символы, из которых генератор имеет право создавать код.
-  # Здесь специально нет похожих 0/O, 1/I/L.
+  # Исключены визуально похожие 0/O и 1/I/L.
   alphabet: "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-  # Для preset: custom здесь можно полностью нарисовать каждый символ.
-  # Все glyph должны иметь одинаковую ширину/высоту.
-  # 1 = voxel присутствует, 0 = пустота.
+  # Используется только при preset: custom.
+  # Все glyph обязаны иметь одинаковую ширину и высоту.
+  # 1 = voxel есть, 0 = пустое место.
   custom-glyphs: {}
 
-  # Полный пример собственного символа:
+  # Пример:
   # custom-glyphs:
   #   A:
   #     - "01110"
   #     - "10001"
-  #     - "10001"
   #     - "11111"
-  #     - "10001"
-  #     - "10001"
   #     - "10001"
 
 # =============================================================================
 # ГЕОМЕТРИЯ VOXEL-СИМВОЛОВ
 # =============================================================================
 geometry:
-  # Ширина одного bitmap-пикселя в Minecraft-блоках.
-  # Чем больше, тем жирнее горизонтальные штрихи.
-  pixel-width: 2
+  # ornate-9x12 уже детализированный, поэтому 1x1 сохраняет тонкие элементы.
+  # Для classic-5x7 прежний массивный вид можно получить 2x2.
+  pixel-width: 1
+  pixel-height: 1
 
-  # Высота одного bitmap-пикселя в блоках.
-  # Чем больше, тем выше и массивнее символ.
-  pixel-height: 2
+  # Реальная 3D-глубина. Reference-style рассчитан примерно на 3..5.
+  depth-blocks: 4
 
-  # Реальная глубина 3D extrusion каждого пикселя.
-  # 1 = почти плоская буква, 3..6 = заметный объём.
-  depth-blocks: 3
-
-  # Сколько передних depth-слоёв используют palette.front.
+  # Передний / задний слои; промежуток использует palette.side.
   front-thickness-blocks: 1
-
-  # Сколько задних depth-слоёв используют palette.back.
-  # Остаток между ними использует palette.side.
   back-thickness-blocks: 1
 
-  # Расстояние между соседними символами.
   letter-gap-blocks: 2
-
-  # На сколько блоков каждая следующая буква постепенно поднимается/опускается.
-  # Пример: 0.5 создаёт ступенчатую композицию вверх.
   letter-rise-blocks: 0.0
-
-  # На сколько каждая следующая буква постепенно уходит вперёд/назад по глубине.
   letter-depth-step-blocks: 0.0
-
-  # true = центрировать всю строку относительно scene center.
   center-text: true
-
-  # Отразить bitmap по горизонтали.
   mirror-horizontal: false
-
-  # Отразить bitmap по вертикали.
   mirror-vertical: false
-
-  # false = объём вытягивается от игрока.
-  # true  = объём вытягивается в сторону игрока.
   extrude-toward-camera: false
+
+  # ---------------------------------------------------------------------------
+  # POROUS FILL — КОНТРОЛИРУЕМЫЕ ПУСТОТЫ ВНУТРИ СИМВОЛОВ
+  # ---------------------------------------------------------------------------
+  fill:
+    # solid  = не удалять элементы шрифта.
+    # porous = часть voxel-поверхности удаляется, создавая рваную/сетчатую форму.
+    mode: "porous"
+
+    # Какую долю поверхности примерно оставить: 0.35..1.0.
+    # 0.78 означает около 78% сохранённых voxel. Алгоритм может оставить больше,
+    # если дальнейшее удаление разрушило бы связность символа.
+    density: 0.78
+
+    # true = перед удалением проверять, что символ не распался на дополнительные
+    # несвязанные куски. Рекомендуется всегда оставлять true для production.
+    preserve-connectivity: true
+
+    # true = не удалять концевые точки штрихов; помогает сохранять форму цифр/букв.
+    protect-endpoints: true
+
+    # Насколько агрессивно беречь внешний контур от прореживания, 0..100.
+    # Чем выше число, тем плотнее силуэт и тем больше пустот останется внутри.
+    outline-preserve-percent: 78.0
+
+    # Абсолютный минимум элементов поверхности, который должен остаться у glyph.
+    # Защита для небольших custom-font символов.
+    min-retained-pixels: 14
 
 # =============================================================================
 # РАНДОМНОСТЬ
 # =============================================================================
 randomness:
-  # Главный переключатель случайных отклонений.
   enabled: true
-
-  # random = каждый вход новая сцена.
-  # fixed  = одинаковая сцена при одинаковом fixed-seed; удобно для настройки.
-  seed-mode: "random"
-
-  # Используется только при seed-mode: fixed.
+  seed-mode: "random" # random | fixed
   fixed-seed: 1337
 
   character:
-    # Случайный сдвиг каждого символа по горизонтали, 0..N блоков.
+    # Reference-style держит буквы почти в одной строке. Сложность создаётся
+    # пустотами и материалами, а не сильным разбросом символов.
     horizontal-jitter-blocks: 0
-
-    # Случайный сдвиг каждого символа вверх/вниз.
-    vertical-jitter-blocks: 1
-
-    # Случайный сдвиг отдельного символа по глубине.
-    depth-jitter-blocks: 1
-
-    # Случайно добавляет до N блоков к глубине отдельного символа.
+    vertical-jitter-blocks: 0
+    depth-jitter-blocks: 0
     depth-variation-blocks: 0
 
-    # Индивидуальный случайный yaw каждого символа.
-    rotation-yaw-jitter-degrees: 0.0
-
-    # Индивидуальный случайный pitch каждого символа.
-    rotation-pitch-jitter-degrees: 0.0
-
-    # Индивидуальный случайный roll каждого символа.
-    rotation-roll-jitter-degrees: 0.0
+    # Лёгкие индивидуальные углы не дают строке выглядеть идеально машинной.
+    rotation-yaw-jitter-degrees: 1.5
+    rotation-pitch-jitter-degrees: 0.75
+    rotation-roll-jitter-degrees: 0.5
 
   scene:
-    # Случайная разница общей дистанции сцены.
     distance-jitter-blocks: 0.0
-
-    # Случайная разница общей высоты.
     height-jitter-blocks: 0.0
-
-    # Случайный боковой сдвиг всей сцены.
     lateral-jitter-blocks: 0.0
-
-    # Случайно менять направление расположения всей CAPTCHA вокруг игрока.
     forward-yaw-jitter-degrees: 0.0
-
-    # Случайно менять общий yaw самой конструкции.
-    rotation-yaw-jitter-degrees: 2.0
-
-    # Случайно менять общий pitch.
+    rotation-yaw-jitter-degrees: 1.0
     rotation-pitch-jitter-degrees: 0.0
-
-    # Случайно менять общий roll.
     rotation-roll-jitter-degrees: 0.0
 
 # =============================================================================
-# ПАЛИТРЫ И "ЦВЕТ" 3D CAPTCHA
+# ПАЛИТРА MOSAIC
 # =============================================================================
 palette:
-  # Как выбирать материалы:
-  #   per-block     — материал выбирается для каждого voxel-блока.
-  #   per-character — выбор более стабилен внутри отдельного символа.
+  # Доступно:
+  #   clustered     — новый режим: соседние voxel получают общий материал
+  #                   небольшими пятнами/кластерами, как на reference.
+  #   per-block     — каждый voxel выбирается независимо.
+  #   per-character — один материал стабильнее внутри буквы.
   #   solid         — всегда первый материал группы.
-  mode: "per-block"
+  mode: "clustered"
 
-  # Передняя поверхность букв.
-  # weight — относительная вероятность материала.
+  # Размер цветовых пятен в clustered mode. Для каждой буквы выбирается
+  # случайный размер внутри диапазона.
+  cluster-size-min: 2
+  cluster-size-max: 5
+
+  # Передняя поверхность. Stained glass даёт реальную ванильную прозрачность;
+  # произвольный numeric alpha Minecraft-блоки не поддерживают.
   front:
-    - block: "minecraft:polished_deepslate"
-      weight: 5
+    - block: "minecraft:cyan_stained_glass"
+      weight: 4
+    - block: "minecraft:light_blue_stained_glass"
+      weight: 4
+    - block: "minecraft:blue_stained_glass"
+      weight: 3
+    - block: "minecraft:gray_stained_glass"
+      weight: 3
     - block: "minecraft:cyan_terracotta"
       weight: 3
     - block: "minecraft:light_blue_terracotta"
       weight: 2
+    - block: "minecraft:weathered_cut_copper"
+      weight: 2
+    - block: "minecraft:oxidized_cut_copper"
+      weight: 2
+    - block: "minecraft:polished_deepslate"
+      weight: 3
 
-  # Боковые грани, формирующие основную 3D-толщину.
+  # Боковые грани намеренно темнее — это подчёркивает настоящую 3D-толщину.
   side:
     - block: "minecraft:deepslate_tiles"
       weight: 5
-    - block: "minecraft:deepslate_bricks"
-      weight: 3
+    - block: "minecraft:polished_deepslate"
+      weight: 4
     - block: "minecraft:blackstone"
+      weight: 3
+    - block: "minecraft:gray_stained_glass"
       weight: 2
+    - block: "minecraft:oxidized_cut_copper"
+      weight: 1
 
-  # Задняя поверхность символов.
   back:
     - block: "minecraft:blackstone"
-      weight: 4
+      weight: 5
     - block: "minecraft:polished_blackstone"
+      weight: 3
+    - block: "minecraft:deepslate_tiles"
       weight: 2
 
   accent:
-    # Добавлять редкие яркие блоки в основную поверхность.
+    # Редкие тёплые/медные точки внутри основной поверхности.
+    enabled: true
+    chance-percent: 5.0
+    materials:
+      - block: "minecraft:cut_copper"
+        weight: 2
+      - block: "minecraft:weathered_cut_copper"
+        weight: 2
+      - block: "minecraft:oxidized_cut_copper"
+        weight: 1
+
+  outline:
+    # Новый отдельный тёмный контур. Он применяется только к передней поверхности
+    # по внешним границам исходного glyph и помогает читать porous-символы.
     enabled: true
 
-    # Вероятность accent на подходящем voxel в процентах.
-    chance-percent: 8.0
+    # Вероятность использовать outline-палитру на подходящем граничном voxel.
+    chance-percent: 86.0
 
-    # Палитра accent-блоков.
     materials:
-      - block: "minecraft:sea_lantern"
-        weight: 1
-      - block: "minecraft:verdant_froglight"
-        weight: 1
+      - block: "minecraft:polished_deepslate"
+        weight: 5
+      - block: "minecraft:deepslate_tiles"
+        weight: 4
+      - block: "minecraft:blackstone"
+        weight: 3
+      - block: "minecraft:gray_stained_glass"
+        weight: 2
 
 # =============================================================================
 # ВИЗУАЛЬНЫЕ ПОМЕХИ
 # =============================================================================
 noise:
-  # Включить дополнительные блоки вокруг/за CAPTCHA.
+  # Небольшое количество независимых прозрачных кластеров вокруг/за строкой.
   enabled: true
-
-  # Количество центров noise-кластеров.
-  count: 10
-
-  # Минимальный размер одного кластера.
+  count: 5
   cluster-size-min: 1
-
-  # Максимальный размер одного кластера.
   cluster-size-max: 2
-
-  # Насколько далеко noise может выйти левее/правее текста.
   horizontal-padding-blocks: 4
-
-  # Насколько далеко noise может выйти выше/ниже текста.
   vertical-padding-blocks: 3
-
-  # Минимальная глубина noise за основной поверхностью.
   depth-min-blocks: 3
+  depth-max-blocks: 7
 
-  # Максимальная глубина noise.
-  depth-max-blocks: 8
-
-  # Для визуально лёгких помех удобно использовать stained_glass.
   materials:
     - block: "minecraft:gray_stained_glass"
       weight: 5
     - block: "minecraft:light_blue_stained_glass"
-      weight: 2
+      weight: 3
     - block: "minecraft:cyan_stained_glass"
+      weight: 2
+    - block: "minecraft:blue_stained_glass"
       weight: 1
 
 # =============================================================================
-# ACTIONS — КОНСТРУКТОР РЕАКЦИЙ НА СОБЫТИЯ
+# ACTIONS — КОНСТРУКТОР РЕАКЦИЙ
 # =============================================================================
-# Actions позволяют собирать поведение без изменения кода.
+# TRIGGERS:
+#   challenge-start, wrong-answer, passed, exhausted, timeout, recovery,
+#   rate-limited, busy, network-full, unavailable, route-unavailable
 #
-# ДОСТУПНЫЕ TRIGGERS:
-#   challenge-start   — игрок полностью появился в CAPTCHA Limbo.
-#   wrong-answer      — введён неверный код, попытки ещё остались.
-#   passed            — код введён правильно, backend уже выбран.
-#   exhausted         — закончились попытки.
-#   timeout           — истёк timeout-seconds.
-#   recovery          — игрок возвращён на платформу/spawn.
-#   rate-limited      — IP превысил join-rate.
-#   busy              — достигнут max-active-captchas.
-#   network-full      — достигнут общий лимит routing.
-#   unavailable       — Limbo/CAPTCHA не удалось создать.
-#   route-unavailable — после CAPTCHA нет доступного backend.
+# TYPES:
+#   message, actionbar, title, sound, command, disconnect, connect,
+#   teleport, gamemode, bossbar
 #
-# ДОСТУПНЫЕ TYPES:
-#   message    — отправить чат-сообщение.
-#   actionbar  — показать ActionBar.
-#   title      — показать Title + Subtitle.
-#   sound      — воспроизвести звук.
-#   command    — выполнить команду от консоли Velocity.
-#   disconnect — отключить игрока с текстом.
-#   connect    — подключить к backend.
-#   teleport   — телепортировать внутри Limbo.
-#   gamemode   — изменить GameMode внутри Limbo.
-#   bossbar    — создать/обновить/анимировать/скрыть BossBar.
+# Общие поля:
+#   enabled, type, delay-ms, chance-percent, permission, stop-after
 #
-# ОБЩИЕ ПОЛЯ КАЖДОГО ACTION:
-#   enabled: true|false
-#     Временно включить/выключить конкретное действие.
-#
-#   type: "..."
-#     Один из типов выше.
-#
-#   delay-ms: 0
-#     Задержка перед выполнением.
-#     Пример: 1000 = через одну секунду.
-#
-#   chance-percent: 100.0
-#     Вероятность выполнения 0..100.
-#     Пример: 25 = примерно каждый четвёртый раз.
-#
-#   permission: ""
-#     Если не пусто, Action выполняется только игроку с permission.
-#
-#   stop-after: false
-#     true = после этого Action не выполнять следующие Actions данного trigger.
-#
-# TERMINAL ACTIONS:
-#   disconnect и connect возвращают terminal-состояние и обычно останавливают lifecycle.
-#   Для них лучше delay-ms: 0, если тебе важно немедленно завершить текущую обработку.
-#
-# BOSSBAR — ПОЛНАЯ СПРАВКА:
-#   type: "bossbar"
-#   bossbar-id: "captcha-timer"
-#     Уникальный ID панели для конкретного игрока. По ID другие Actions находят ту же панель.
-#
-#   bossbar-operation:
-#     show         — создать (если нет), показать и применить параметры.
-#     update       — изменить текст/цвет/overlay/progress, не требуя новой панели.
-#     animate      — анимировать progress от start до end.
-#     set-progress — установить абсолютный progress.
-#     add-progress — прибавить/вычесть delta. Работает даже во время animate.
-#     pause        — поставить текущую анимацию на паузу.
-#     resume       — продолжить паузу без скачка времени.
-#     hide         — скрыть панель, но оставить её состояние в памяти.
-#     remove       — скрыть, остановить таймер и полностью удалить панель.
-#
-#   text: "..."
-#     MiniMessage-заголовок BossBar. В animate обновляется каждый tick,
-#     поэтому можно использовать {bossbar_seconds} и {bossbar_percent}.
-#
-#   bossbar-color:
-#     blue | green | pink | purple | red | white | yellow
-#
-#   bossbar-overlay:
-#     progress | notched_6 | notched_10 | notched_12 | notched_20
-#
-#   bossbar-progress: 0.0..1.0
-#     Значение для show/update/set-progress.
-#
-#   bossbar-progress-delta: -1.0..1.0
-#     Изменение для add-progress.
-#     Пример: -0.15 резко уменьшит полоску после неправильного ответа.
-#
-#   bossbar-start-progress / bossbar-end-progress:
-#     Начало и конец animate.
-#     1 -> 0 = countdown, 0 -> 1 = countup.
-#
-#   bossbar-duration-ms:
-#     Длительность animate.
-#     0 = автоматически использовать {timeout} секунд, если trigger передал timeout.
-#
-#   bossbar-update-interval-ms:
-#     Частота обновления анимации. Минимум 50ms.
-#     100ms обычно плавно и дёшево.
-#
-#   bossbar-hide-on-finish:
-#     После animate скрыть, но не уничтожать панель.
-#
-#   bossbar-remove-on-finish:
-#     После animate полностью удалить панель.
-#
-# ПРИМЕР COUNTUP:
-#   - type: "bossbar"
-#     bossbar-id: "loading"
-#     bossbar-operation: "animate"
-#     text: "<aqua>Загрузка <white>{bossbar_percent}%</white></aqua>"
-#     bossbar-color: "blue"
-#     bossbar-start-progress: 0.0
-#     bossbar-end-progress: 1.0
-#     bossbar-duration-ms: 3000
-#     bossbar-remove-on-finish: true
-#
-# ПРИМЕР PAUSE/RESUME:
-#   - type: "bossbar"
-#     bossbar-id: "captcha-timer"
-#     bossbar-operation: "pause"
-#   - type: "bossbar"
-#     delay-ms: 2000
-#     bossbar-id: "captcha-timer"
-#     bossbar-operation: "resume"
+# BossBar operations:
+#   show, update, animate, set-progress, add-progress,
+#   pause, resume, hide, remove
 # =============================================================================
 actions:
-  # Главный выключатель всей Action-системы.
   enabled: true
 
   triggers:
     challenge-start:
-      # Главный таймер CAPTCHA. duration=0 автоматически использует general.timeout-seconds.
       - type: "bossbar"
         bossbar-id: "captcha-timer"
         bossbar-operation: "animate"
@@ -731,7 +511,6 @@ actions:
         bossbar-hide-on-finish: false
         bossbar-remove-on-finish: true
 
-      # Короткий Title при появлении.
       - type: "title"
         title: "<gradient:#54F4D1:#4D9CFF><bold>pnCaptcha</bold></gradient>"
         subtitle: "<gray>Введи код из блоков в чат</gray>"
@@ -739,7 +518,6 @@ actions:
         stay-ms: 1400
         fade-out-ms: 350
 
-      # Звук начала проверки.
       - type: "sound"
         sound: "minecraft:block.amethyst_block.chime"
         source: "master"
@@ -747,8 +525,6 @@ actions:
         sound-pitch: 1.15
 
     wrong-answer:
-      # Неправильный ответ дополнительно отнимает 12% визуального BossBar.
-      # Таймер продолжает работать от текущей скорректированной позиции.
       - type: "bossbar"
         bossbar-id: "captcha-timer"
         bossbar-operation: "add-progress"
@@ -766,7 +542,6 @@ actions:
         sound-pitch: 0.7
 
     passed:
-      # Всегда убрать BossBar перед уходом с Limbo.
       - type: "bossbar"
         bossbar-id: "captcha-timer"
         bossbar-operation: "remove"
@@ -792,7 +567,6 @@ actions:
       - type: "bossbar"
         bossbar-id: "captcha-timer"
         bossbar-operation: "remove"
-
       - type: "sound"
         sound: "minecraft:entity.villager.no"
         source: "master"
@@ -803,14 +577,12 @@ actions:
       - type: "bossbar"
         bossbar-id: "captcha-timer"
         bossbar-operation: "remove"
-
       - type: "sound"
         sound: "minecraft:block.beacon.deactivate"
         source: "master"
         volume: 0.8
         sound-pitch: 0.8
 
-    # Эти lifecycle triggers пустые по умолчанию, но полностью доступны для настройки.
     rate-limited: []
     busy: []
     network-full: []
@@ -818,7 +590,7 @@ actions:
     route-unavailable: []
 
   # ---------------------------------------------------------------------------
-  # КОПИРУЕМЫЕ ПРИМЕРЫ ACTIONS
+  # КОПИРУЕМЫЕ ПРИМЕРЫ
   # ---------------------------------------------------------------------------
   # MESSAGE:
   # - type: "message"
@@ -834,14 +606,10 @@ actions:
   # - type: "title"
   #   title: "<green><bold>Готово</bold></green>"
   #   subtitle: "<gray>Подключаем…</gray>"
-  #   fade-in-ms: 150
-  #   stay-ms: 1000
-  #   fade-out-ms: 250
   #
   # SOUND:
   # - type: "sound"
   #   sound: "minecraft:entity.experience_orb.pickup"
-  #   source: "master"
   #   volume: 0.8
   #   sound-pitch: 1.2
   #
@@ -851,19 +619,13 @@ actions:
   #
   # DISCONNECT:
   # - type: "disconnect"
-  #   lines:
-  #     - "<red><bold>Проверка остановлена</bold></red>"
-  #     - "<gray>Подключись снова через несколько секунд.</gray>"
+  #   text: "<red>Проверка остановлена</red>"
   #
-  # CONNECT к конкретному серверу:
-  # - type: "connect"
-  #   server: "queue"
-  #
-  # CONNECT через обычный router:
+  # CONNECT через router:
   # - type: "connect"
   #   server: "@route"
   #
-  # TELEPORT внутри Limbo:
+  # TELEPORT:
   # - type: "teleport"
   #   x: 0.5
   #   y: 70.0
@@ -875,43 +637,32 @@ actions:
   # - type: "gamemode"
   #   game-mode: "adventure"
   #
-  # УСЛОВИЕ ПО PERMISSION И ШАНСУ:
-  # - type: "sound"
-  #   permission: "pncaptcha.vip"
-  #   chance-percent: 25.0
-  #   sound: "minecraft:block.note_block.pling"
-  #
-  # BOSSBAR статический:
+  # BOSSBAR COUNTUP:
   # - type: "bossbar"
-  #   bossbar-id: "attempts"
-  #   bossbar-operation: "show"
-  #   text: "<yellow>Попытки: {remaining}/{max}</yellow>"
-  #   bossbar-color: "yellow"
-  #   bossbar-overlay: "notched_10"
-  #   bossbar-progress: 1.0
+  #   bossbar-id: "loading"
+  #   bossbar-operation: "animate"
+  #   text: "<aqua>Загрузка <white>{bossbar_percent}%</white></aqua>"
+  #   bossbar-start-progress: 0.0
+  #   bossbar-end-progress: 1.0
+  #   bossbar-duration-ms: 3000
+  #   bossbar-remove-on-finish: true
   #
-  # BOSSBAR уменьшить после события:
+  # BOSSBAR PAUSE/RESUME:
   # - type: "bossbar"
-  #   bossbar-id: "attempts"
-  #   bossbar-operation: "add-progress"
-  #   bossbar-progress-delta: -0.33
-  #
-  # BOSSBAR полностью удалить:
+  #   bossbar-id: "captcha-timer"
+  #   bossbar-operation: "pause"
   # - type: "bossbar"
-  #   bossbar-id: "attempts"
-  #   bossbar-operation: "remove"
+  #   delay-ms: 2000
+  #   bossbar-id: "captcha-timer"
+  #   bossbar-operation: "resume"
 
 # =============================================================================
 # СТАНДАРТНЫЕ LIFECYCLE-СООБЩЕНИЯ
 # =============================================================================
-# messages.enabled отключает только стандартные сообщения этого раздела.
-# Текстовые Actions остаются независимыми и продолжат работать.
+# messages.enabled отключает только сообщения ниже; текстовые Actions независимы.
 messages:
-  # Главный переключатель стандартных chat-сообщений.
   enabled: true
 
-  # Отправляется после появления игрока в Limbo.
-  # Доступно: {max}, {timeout}.
   prompt:
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     - "<gradient:#54F4D1:#4D9CFF><bold>pnCaptcha</bold></gradient> <dark_gray>• <white>Проверка подключения"
@@ -919,54 +670,39 @@ messages:
     - "<gray>Попыток: <aqua>{max}</aqua> <dark_gray>• <gray>Время: <aqua>{timeout}s</aqua>"
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-  # Неверный ответ, но попытки ещё остались.
-  # Доступно: {attempt}, {max}, {remaining}.
   wrong:
     - "<red><bold>Неверный код</bold></red> <dark_gray>• <gray>попытка <white>{attempt}</white>/<white>{max}</white>"
     - "<gray>Проверь символы и отправь ответ ещё раз.</gray>"
 
-  # Успешная проверка.
-  # Доступно: {server}.
   passed:
     - "<green><bold>Проверка пройдена</bold></green>"
     - "<gray>Перенаправляю тебя на <white>{server}</white>…</gray>"
 
-  # Автовозврат после падения/полёта/ухода слишком далеко.
-  # Доступно: {reason}.
   recovered:
     - "<yellow><bold>Возврат на платформу</bold></yellow>"
     - "<gray>{reason}</gray>"
 
-  # Истёк общий timeout.
   timeout:
     - "<red><bold>Время проверки истекло.</bold></red>"
 
-  # Использованы все попытки.
   too-many-attempts:
     - "<red><bold>Слишком много неверных попыток.</bold></red>"
 
-  # Достигнут security.max-active-captchas.
   busy:
     - "<red>Сервис CAPTCHA сейчас перегружен. Попробуй чуть позже.</red>"
 
-  # Сработал IP rate-limit.
   rate-limited:
     - "<red>Слишком много подключений с твоего IP. Попробуй позже.</red>"
 
-  # Сработал общий лимит routing.network-max-players.
   network-full:
     - "<red>Сеть заполнена. Попробуй подключиться позже.</red>"
 
-  # Не удалось создать персональный Limbo/CAPTCHA.
   unavailable:
     - "<red>CAPTCHA временно недоступна.</red>"
 
-  # Проверка пройдена, но router не нашёл доступный backend.
   route-unavailable:
     - "<red>Сейчас нет доступного сервера для подключения.</red>"
 
-  # Уведомление администратору о новом GitHub Release.
-  # Доступно: {current}, {latest}, {url}.
   update-available:
     - "<dark_gray>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     - "<gradient:#FFD166:#FF6B6B><bold>Доступно обновление pnCaptcha</bold></gradient>"
