@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '1.2.0'
+version = '1.2.1'
 
 repositories {
     mavenCentral()
@@ -61,4 +61,29 @@ tasks.named('shadowJar') {
     relocate 'org.bstats', 'ru.privatenull.pncaptcha.lib.bstats'
 }
 
-tasks.named('build') { dependsOn tasks.named('shadowJar') }
+def verifyBStatsLayout = tasks.register('verifyBStatsLayout') {
+    dependsOn tasks.named('shadowJar')
+    inputs.file(tasks.named('shadowJar').flatMap { it.archiveFile })
+    doLast {
+        File archive = tasks.named('shadowJar').get().archiveFile.get().asFile
+        Set<String> entries
+        new java.util.zip.ZipFile(archive).withCloseable { zip ->
+            entries = zip.entries()*.name as Set
+        }
+
+        [
+                'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class',
+                'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics$Factory.class',
+                'ru/privatenull/pncaptcha/lib/bstats/MetricsBase.class'
+        ].each { required ->
+            if (!entries.contains(required)) {
+                throw new GradleException("Missing required relocated bStats class: ${required}")
+            }
+        }
+        if (entries.any { it.startsWith('org/bstats/') }) {
+            throw new GradleException('Unrelocated org/bstats classes found in the release JAR')
+        }
+    }
+}
+
+tasks.named('build') { dependsOn verifyBStatsLayout }

@@ -22,7 +22,8 @@ jobs:
 
       - name: Verify shaded runtime dependencies
         run: |
-          JAR="build/libs/pnCaptcha-1.2.0-velocity-java21.jar"
+          VERSION=$(sed -n "s/^version = '\([^']*\)'/\1/p" build.gradle | head -n 1)
+          JAR="build/libs/pnCaptcha-${VERSION}-velocity-java21.jar"
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'velocity-plugin.json'
           jar tf "$JAR" | grep -q 'config.yml'
@@ -30,6 +31,8 @@ jobs:
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/ActionService.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/BossBarService.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics\$Factory.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/MetricsBase.class'
           if jar tf "$JAR" | grep -q '^org/bstats/'; then
             echo 'bStats was not relocated correctly'
             exit 1

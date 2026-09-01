@@ -28,7 +28,7 @@ PacketEvents не требуется.
 - Общий лимит сети, резервные слоты и отдельные лимиты/резервные слоты каждого backend.
 - IP rate-limit, TTL cache проверенных UUID/IP, bypass permission и лимит одновременно активных CAPTCHA-миров.
 - Асинхронная проверка GitHub Releases при запуске.
-- bStats Velocity с service id `33698`; библиотека shaded и relocated внутрь JAR.
+- bStats Velocity с service id `33698`; библиотека shaded и relocated внутрь JAR. Первый отчёт отправляется через 3–6 минут после запуска, а публичная статистика может обновляться до 30 минут. Глобальное отключение в `plugins/bStats/config.txt` имеет приоритет и явно отображается в логе pnCaptcha.
 
 ## Новый mosaic-визуал
 
@@ -210,5 +210,5 @@ gradle clean build
 Готовый официальный shaded JAR:
 
 ```text
-build/libs/pnCaptcha-1.2.0-velocity-java21.jar
+build/libs/pnCaptcha-1.2.1-velocity-java21.jar
 ```

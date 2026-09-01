@@ -12,7 +12,6 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
 import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
-import org.bstats.charts.SimplePie
 import org.bstats.velocity.Metrics
 import org.slf4j.Logger
 import ru.privatenull.pncaptcha.action.ActionService
@@ -24,6 +23,7 @@ import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
 import ru.privatenull.pncaptcha.manager.CaptchaManager
 import ru.privatenull.pncaptcha.message.MessageService
+import ru.privatenull.pncaptcha.metrics.BStatsMetrics
 import ru.privatenull.pncaptcha.routing.ServerRouter
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
@@ -49,14 +49,12 @@ class PnCaptchaPlugin @Inject constructor(
     @Volatile private var manager: CaptchaManager? = null
     private var environment: CaptchaLimboEnvironment? = null
     private var updateChecker: UpdateChecker? = null
-    private var metrics: Metrics? = null
+    private var metrics: BStatsMetrics? = null
 
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
         val config = CaptchaConfigLoader.load(dataDirectory)
         Files.deleteIfExists(dataDirectory.resolve("config.properties"))
-
-        setupMetrics(config)
 
         val font = CaptchaFont.resolve(config.font)
         val factory = resolveLimboFactory()
@@ -85,6 +83,7 @@ class PnCaptchaPlugin @Inject constructor(
         )
 
         updateChecker = UpdateChecker(this, proxy, logger, config, VERSION, messageService).also { it.start() }
+        metrics = BStatsMetrics.start(this, metricsFactory, dataDirectory, logger, config)
 
         logger.info("pnCaptcha {} initialized. Config: plugins/pncaptcha/config.yml", VERSION)
         logger.info(
@@ -113,34 +112,6 @@ class PnCaptchaPlugin @Inject constructor(
         )
     }
 
-    private fun setupMetrics(config: CaptchaConfig) {
-        if (!config.metrics.enabled) {
-            logger.info("bStats metrics disabled by plugins/pncaptcha/config.yml")
-            return
-        }
-
-        metrics = metricsFactory.make(this, BSTATS_SERVICE_ID).also { metrics ->
-            if (config.metrics.customCharts) {
-                metrics.addCustomChart(SimplePie("routing_strategy") { config.routing.strategy.lowercase() })
-                metrics.addCustomChart(SimplePie("routing_servers") { config.routing.servers.count { it.enabled }.toString() })
-                metrics.addCustomChart(SimplePie("captcha_length") { config.captchaLength.toString() })
-                metrics.addCustomChart(SimplePie("font_preset") { config.font.preset.lowercase() })
-                metrics.addCustomChart(SimplePie("voxel_depth") { config.geometry.depthBlocks.toString() })
-                metrics.addCustomChart(SimplePie("noise_enabled") { config.noise.enabled.toString() })
-                metrics.addCustomChart(SimplePie("recovery_enabled") { config.player.recovery.enabled.toString() })
-                metrics.addCustomChart(SimplePie("actions_enabled") { config.actions.enabled.toString() })
-                metrics.addCustomChart(SimplePie("bossbar_actions") {
-                    config.actions.triggers.values.flatten().any { it.type.equals("bossbar", ignoreCase = true) }.toString()
-                })
-            }
-        }
-
-        logger.info(
-            "bStats metrics enabled with service id {} (subject to the server owner's global bStats opt-out).",
-            BSTATS_SERVICE_ID
-        )
-    }
-
     @Subscribe
     fun onLoginLimboRegister(event: LoginLimboRegisterEvent) {
         manager?.register(event)
@@ -161,7 +132,7 @@ class PnCaptchaPlugin @Inject constructor(
         manager?.shutdown()
         manager = null
         updateChecker = null
-        metrics?.shutdown()
+        metrics?.close()
         metrics = null
         environment?.close()
         environment = null
@@ -177,7 +148,6 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "1.2.0"
-        const val BSTATS_SERVICE_ID = 33698
+        const val VERSION = "1.2.1"
     }
 }

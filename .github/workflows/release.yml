@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release:
-    if: ${{ startsWith(github.event.head_commit.message, 'release pnCaptcha 1.2.0') }}
+    if: ${{ startsWith(github.event.head_commit.message, 'release:') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,8 @@ jobs:
 
       - name: Verify release jar
         run: |
-          JAR="build/libs/pnCaptcha-1.2.0-velocity-java21.jar"
+          VERSION=$(sed -n "s/^version = '\([^']*\)'/\1/p" build.gradle | head -n 1)
+          JAR="build/libs/pnCaptcha-${VERSION}-velocity-java21.jar"
           test -f "$JAR"
           jar tf "$JAR" | grep -q 'velocity-plugin.json'
           jar tf "$JAR" | grep -q 'config.yml'
@@ -39,24 +40,57 @@ jobs:
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/captcha/CaptchaLayout.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/BossBarService.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics\$Factory.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/MetricsBase.class'
           if jar tf "$JAR" | grep -q '^org/bstats/'; then
             echo 'bStats was not relocated correctly'
             exit 1
           fi
 
-      - name: Publish or update stable latest release
+      - name: Read release metadata
+        id: release
+        shell: bash
+        run: |
+          VERSION=$(sed -n "s/^version = '\([^']*\)'/\1/p" build.gradle | head -n 1)
+          NOTES="docs/releases/v${VERSION}.md"
+          BODY="build/release-body.md"
+          JAR="build/libs/pnCaptcha-${VERSION}-velocity-java21.jar"
+          if [ -z "$VERSION" ]; then
+            echo "Could not read version from build.gradle" >&2
+            exit 1
+          fi
+          if [ ! -f "$NOTES" ]; then
+            echo "Missing release notes: $NOTES" >&2
+            exit 1
+          fi
+          if [ ! -f "$JAR" ]; then
+            echo "Missing release JAR: $JAR" >&2
+            exit 1
+          fi
+          TITLE=$(head -n 1 "$NOTES" | sed 's/^# //')
+          tail -n +2 "$NOTES" | sed '1{/^$/d;}' > "$BODY"
+          sha256sum "$JAR" > build/libs/SHA256SUMS.txt
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+          echo "jar=$JAR" >> "$GITHUB_OUTPUT"
+
+      - name: Publish stable release and tag
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TITLE: ${{ steps.release.outputs.title }}
+          BODY: ${{ steps.release.outputs.body }}
+          JAR: ${{ steps.release.outputs.jar }}
         run: |
-          if gh release view v1.2.0 >/dev/null 2>&1; then
-            gh release edit v1.2.0 \
-              --title '1.2.0 - Мозаичная 3D CAPTCHA' \
-              --latest
-          else
-            gh release create v1.2.0 \
-              build/libs/pnCaptcha-1.2.0-velocity-java21.jar \
-              --target "$GITHUB_SHA" \
-              --title '1.2.0 - Мозаичная 3D CAPTCHA' \
-              --notes-file docs/releases/v1.2.0.md \
-              --latest
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "Release v${VERSION} already exists; refusing to overwrite it." >&2
+            exit 1
           fi
+          gh release create "v${VERSION}" \
+            "$JAR" \
+            build/libs/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "$TITLE" \
+            --notes-file "$BODY" \
+            --latest
