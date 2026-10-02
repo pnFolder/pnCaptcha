@@ -38,6 +38,7 @@ class CaptchaManager(
     private val actions: ActionService
 ) {
     private val timeoutTasks = ConcurrentHashMap<UUID, ScheduledTask>()
+    private val disposeTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val lastRecoveryAt = ConcurrentHashMap<UUID, Long>()
     private val beginLock = Any()
 
@@ -350,9 +351,14 @@ class CaptchaManager(
     }
 
     private fun scheduleDispose(sessionId: UUID) {
-        proxy.scheduler.buildTask(plugin, Runnable { environment.dispose(sessionId) })
+        disposeTasks.remove(sessionId)?.cancel()
+        val task = proxy.scheduler.buildTask(plugin, Runnable {
+            disposeTasks.remove(sessionId)
+            environment.dispose(sessionId)
+        })
             .delay(DISPOSE_DELAY)
             .schedule()
+        disposeTasks[sessionId] = task
     }
 
     private fun teleportToCamera(sessionId: UUID, limboPlayer: LimboPlayer, currentYaw: Float?, currentPitch: Float?) {
@@ -368,6 +374,8 @@ class CaptchaManager(
     fun shutdown() {
         timeoutTasks.values.forEach(ScheduledTask::cancel)
         timeoutTasks.clear()
+        disposeTasks.values.forEach(ScheduledTask::cancel)
+        disposeTasks.clear()
         lastRecoveryAt.clear()
         actions.shutdown()
         sessions.clear()

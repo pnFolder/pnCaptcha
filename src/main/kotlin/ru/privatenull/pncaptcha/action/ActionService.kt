@@ -2,6 +2,7 @@ package ru.privatenull.pncaptcha.action
 
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
+import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.player.GameMode
 import net.elytrium.limboapi.api.player.LimboPlayer
 import net.kyori.adventure.key.Key
@@ -15,6 +16,8 @@ import ru.privatenull.pncaptcha.routing.ServerRouter
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 class ActionService(
     private val plugin: Any,
@@ -25,6 +28,7 @@ class ActionService(
     private val router: ServerRouter
 ) {
     private val bossBars = BossBarService(plugin, proxy, messages)
+    private val delayedTasks = ConcurrentHashMap<UUID, CopyOnWriteArrayList<ScheduledTask>>()
 
     fun fire(trigger: String, context: Context): Boolean {
         if (!config.actions.enabled) return false
@@ -39,10 +43,11 @@ class ActionService(
             ) continue
 
             if (action.delayMillis > 0L) {
-                proxy.scheduler.buildTask(plugin, Runnable {
+                val task = proxy.scheduler.buildTask(plugin, Runnable {
                     runCatching { execute(action, context) }
                         .onFailure { logger.warn("Action '{}' failed for trigger '{}'", action.type, trigger, it) }
                 }).delay(Duration.ofMillis(action.delayMillis)).schedule()
+                delayedTasks.computeIfAbsent(context.player.uniqueId) { CopyOnWriteArrayList() }.add(task)
             } else {
                 terminal = runCatching { execute(action, context) }
                     .onFailure { logger.warn("Action '{}' failed for trigger '{}'", action.type, trigger, it) }
@@ -57,10 +62,13 @@ class ActionService(
 
     fun cleanup(playerId: UUID) {
         bossBars.cleanup(playerId)
+        delayedTasks.remove(playerId)?.forEach(ScheduledTask::cancel)
     }
 
     fun shutdown() {
         bossBars.shutdown()
+        delayedTasks.values.flatten().forEach(ScheduledTask::cancel)
+        delayedTasks.clear()
     }
 
     private fun execute(action: ActionDefinition, context: Context): Boolean {
