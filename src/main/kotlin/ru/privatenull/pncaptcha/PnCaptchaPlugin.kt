@@ -10,6 +10,7 @@ import com.velocitypowered.api.plugin.Dependency
 import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
+import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import org.bstats.velocity.Metrics
@@ -50,6 +51,7 @@ class PnCaptchaPlugin @Inject constructor(
     private var environment: CaptchaLimboEnvironment? = null
     private var updateChecker: UpdateChecker? = null
     private var metrics: BStatsMetrics? = null
+    private var verificationCachePurgeTask: ScheduledTask? = null
 
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
@@ -64,6 +66,9 @@ class PnCaptchaPlugin @Inject constructor(
         val actionService = ActionService(this, proxy, logger, config, messageService, serverRouter)
         val sessionManager = CaptchaSessionManager()
         val verificationCache = VerificationCache(config.verifiedCacheTtl)
+        verificationCachePurgeTask = proxy.scheduler.buildTask(this, Runnable {
+            verificationCache.purgeExpired()
+        }).repeat(java.time.Duration.ofMinutes(1)).schedule()
         val rateLimiter = IpJoinRateLimiter(config.maxJoinsPerWindow, config.joinWindow)
 
         environment = limboEnvironment
@@ -134,6 +139,8 @@ class PnCaptchaPlugin @Inject constructor(
         updateChecker = null
         metrics?.close()
         metrics = null
+        verificationCachePurgeTask?.cancel()
+        verificationCachePurgeTask = null
         environment?.close()
         environment = null
     }
@@ -148,6 +155,6 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "1.2.1"
+        const val VERSION = "1.2.2"
     }
 }
