@@ -155,6 +155,6 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "1.2.2"
+        const val VERSION = "1.2.3"
     }
 }

@@ -210,5 +210,5 @@ gradle clean build
 Готовый официальный shaded JAR:
 
 ```text
-build/libs/pnCaptcha-1.2.2-velocity-java21.jar
+build/libs/pnCaptcha-1.2.3-velocity-java21.jar
 ```
