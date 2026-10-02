@@ -166,6 +166,14 @@ class CoreServicesTest {
     }
 
     @Test
+    fun `default resource limits keep concurrent limbo worlds bounded`() {
+        val config = CaptchaConfig()
+
+        assertEquals(16, config.maxActiveCaptchas)
+        assertEquals(1, config.limbo.precreatePaddingChunks)
+    }
+
+    @Test
     fun `old config is backed up when config version changes`(@TempDir tempDir: Path) {
         Files.writeString(tempDir.resolve("config.yml"), "config-version: 2\n")
         CaptchaConfigLoader.load(tempDir)

@@ -55,7 +55,7 @@ data class CaptchaConfig(
 
         require(security.maxJoinsPerWindow in 1..10_000)
         require(security.joinWindowSeconds in 1L..3600L)
-        require(security.maxActiveCaptchas in 1..10_000)
+        require(security.maxActiveCaptchas in 1..64)
 
         require(updates.repository.matches(Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))) {
             "updates.repository must be owner/repository"
@@ -207,7 +207,7 @@ data class RouteServerConfig(
 data class SecurityConfig(
     val maxJoinsPerWindow: Int = 6,
     val joinWindowSeconds: Long = 10,
-    val maxActiveCaptchas: Int = 128,
+    val maxActiveCaptchas: Int = 16,
     val bypassPermission: String = "pncaptcha.bypass"
 )
 

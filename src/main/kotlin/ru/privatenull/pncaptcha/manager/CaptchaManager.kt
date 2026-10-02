@@ -39,6 +39,7 @@ class CaptchaManager(
 ) {
     private val timeoutTasks = ConcurrentHashMap<UUID, ScheduledTask>()
     private val lastRecoveryAt = ConcurrentHashMap<UUID, Long>()
+    private val beginLock = Any()
 
     fun register(event: LoginLimboRegisterEvent) {
         val player = event.player
@@ -74,48 +75,58 @@ class CaptchaManager(
     }
 
     private fun begin(player: Player) {
-        sessions.remove(player.uniqueId)?.let { stale ->
-            timeoutTasks.remove(player.uniqueId)?.cancel()
-            actions.cleanup(player.uniqueId)
-            environment.dispose(stale.id)
+        synchronized(beginLock) {
+            // The check in register() is only an early rejection. Recheck while holding
+            // a lock so concurrent join callbacks cannot create more worlds than allowed.
+            if (environment.activeCount() >= config.maxActiveCaptchas) {
+                val terminal = actions.fire("busy", ActionService.Context(player = player))
+                if (!terminal) player.disconnect(messages.component(config.messages.busy))
+                return
+            }
+
+            sessions.remove(player.uniqueId)?.let { stale ->
+                timeoutTasks.remove(player.uniqueId)?.cancel()
+                actions.cleanup(player.uniqueId)
+                environment.dispose(stale.id)
+            }
+            lastRecoveryAt.remove(player.uniqueId)
+
+            val session = sessions.create(CaptchaSession(playerId = player.uniqueId, answer = generator.generate(config.captchaLength)))
+
+            try {
+                val info = environment.spawn(
+                    sessionId = session.id,
+                    answer = session.answer,
+                    player = player,
+                    handler = CaptchaSessionHandler(this, player.uniqueId, session.id)
+                )
+                logger.info(
+                    "CAPTCHA {} for {}: {} blocks, chunks X {}..{}, Z {}..{}, view/sim={}/{}, yaw/pitch/roll={}/{}/{}",
+                    session.id.toString().take(8), player.username, info.blockCount,
+                    info.chunkBounds.minX, info.chunkBounds.maxX, info.chunkBounds.minZ, info.chunkBounds.maxZ,
+                    info.viewDistance, info.simulationDistance,
+                    "%.2f".format(info.scene.rotationYawDegrees),
+                    "%.2f".format(info.scene.rotationPitchDegrees),
+                    "%.2f".format(info.scene.rotationRollDegrees)
+                )
+            } catch (throwable: Throwable) {
+                sessions.remove(player.uniqueId, session.id)
+                actions.cleanup(player.uniqueId)
+                environment.dispose(session.id)
+                logger.error("Failed to build/spawn CAPTCHA Limbo for {}", player.username, throwable)
+                val terminal = actions.fire(
+                    "unavailable",
+                    ActionService.Context(player = player, sessionId = session.id, captcha = session.answer)
+                )
+                if (!terminal) player.disconnect(messages.component(config.messages.unavailable))
+                return
+            }
+
+            timeoutTasks[player.uniqueId] = proxy.scheduler
+                .buildTask(plugin, Runnable { timeout(player.uniqueId, session.id) })
+                .delay(config.timeout)
+                .schedule()
         }
-        lastRecoveryAt.remove(player.uniqueId)
-
-        val session = sessions.create(CaptchaSession(playerId = player.uniqueId, answer = generator.generate(config.captchaLength)))
-
-        try {
-            val info = environment.spawn(
-                sessionId = session.id,
-                answer = session.answer,
-                player = player,
-                handler = CaptchaSessionHandler(this, player.uniqueId, session.id)
-            )
-            logger.info(
-                "CAPTCHA {} for {}: {} blocks, chunks X {}..{}, Z {}..{}, view/sim={}/{}, yaw/pitch/roll={}/{}/{}",
-                session.id.toString().take(8), player.username, info.blockCount,
-                info.chunkBounds.minX, info.chunkBounds.maxX, info.chunkBounds.minZ, info.chunkBounds.maxZ,
-                info.viewDistance, info.simulationDistance,
-                "%.2f".format(info.scene.rotationYawDegrees),
-                "%.2f".format(info.scene.rotationPitchDegrees),
-                "%.2f".format(info.scene.rotationRollDegrees)
-            )
-        } catch (throwable: Throwable) {
-            sessions.remove(player.uniqueId, session.id)
-            actions.cleanup(player.uniqueId)
-            environment.dispose(session.id)
-            logger.error("Failed to build/spawn CAPTCHA Limbo for {}", player.username, throwable)
-            val terminal = actions.fire(
-                "unavailable",
-                ActionService.Context(player = player, sessionId = session.id, captcha = session.answer)
-            )
-            if (!terminal) player.disconnect(messages.component(config.messages.unavailable))
-            return
-        }
-
-        timeoutTasks[player.uniqueId] = proxy.scheduler
-            .buildTask(plugin, Runnable { timeout(player.uniqueId, session.id) })
-            .delay(config.timeout)
-            .schedule()
     }
 
     fun onSpawn(playerId: UUID, sessionId: UUID, limboPlayer: LimboPlayer) {

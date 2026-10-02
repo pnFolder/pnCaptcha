@@ -51,7 +51,8 @@ object CaptchaConfigLoader {
             security = SecurityConfig(
                 maxJoinsPerWindow = root.int("security.max-joins-per-window", defaults.security.maxJoinsPerWindow),
                 joinWindowSeconds = root.long("security.join-window-seconds", defaults.security.joinWindowSeconds),
-                maxActiveCaptchas = root.int("security.max-active-captchas", defaults.security.maxActiveCaptchas),
+                maxActiveCaptchas = root.int("security.max-active-captchas", defaults.security.maxActiveCaptchas)
+                    .coerceIn(1, 64),
                 bypassPermission = root.string("security.bypass-permission", defaults.security.bypassPermission)
             ),
             metrics = MetricsConfig(
