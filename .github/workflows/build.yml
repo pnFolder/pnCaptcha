@@ -30,13 +30,8 @@ jobs:
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/routing/ServerRouter.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/ActionService.class'
           jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/action/BossBarService.class'
-          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class'
-          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics\$Factory.class'
-          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/bstats/MetricsBase.class'
-          if jar tf "$JAR" | grep -q '^org/bstats/'; then
-            echo 'bStats was not relocated correctly'
-            exit 1
-          fi
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/integration/PnLibraryRuntime.class'
+          jar tf "$JAR" | grep -q 'ru/privatenull/pncaptcha/lib/pnbootstrap/'
 
       - uses: actions/upload-artifact@v4
         with:

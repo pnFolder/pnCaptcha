@@ -5,7 +5,9 @@ plugins {
 }
 
 group = 'ru.privatenull'
-version = '1.2.3'
+version = '1.2.4'
+
+def pnLibraryVersion = '0.0.1-dev.6'
 
 repositories {
     mavenCentral()
@@ -20,7 +22,8 @@ dependencies {
 
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.10'
     implementation 'org.yaml:snakeyaml:2.3'
-    implementation 'org.bstats:bstats-velocity:3.2.1'
+    implementation "io.github.pnfolder:pnlibrary-bootstrap-velocity:${pnLibraryVersion}"
+    compileOnly "io.github.pnfolder:pnlibrary-api:${pnLibraryVersion}"
     implementation('net.kyori:adventure-text-minimessage:4.17.0') {
         exclude group: 'net.kyori', module: 'adventure-api'
     }
@@ -58,32 +61,8 @@ tasks.named('shadowJar') {
     archiveClassifier = ''
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
-    relocate 'org.bstats', 'ru.privatenull.pncaptcha.lib.bstats'
+    relocate 'org.pnfolder.pnlibrary.bootstrap', 'ru.privatenull.pncaptcha.lib.pnbootstrap'
+    relocate 'org.pnfolder.pnlibrary.velocity.bootstrap', 'ru.privatenull.pncaptcha.lib.pnbootstrap.velocity'
+    relocate 'org.pnfolder.pnlibrary.console', 'ru.privatenull.pncaptcha.lib.pnbootstrap.console'
+    relocate 'com.google.gson', 'ru.privatenull.pncaptcha.lib.gson'
 }
-
-def verifyBStatsLayout = tasks.register('verifyBStatsLayout') {
-    dependsOn tasks.named('shadowJar')
-    inputs.file(tasks.named('shadowJar').flatMap { it.archiveFile })
-    doLast {
-        File archive = tasks.named('shadowJar').get().archiveFile.get().asFile
-        Set<String> entries
-        new java.util.zip.ZipFile(archive).withCloseable { zip ->
-            entries = zip.entries()*.name as Set
-        }
-
-        [
-                'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics.class',
-                'ru/privatenull/pncaptcha/lib/bstats/velocity/Metrics$Factory.class',
-                'ru/privatenull/pncaptcha/lib/bstats/MetricsBase.class'
-        ].each { required ->
-            if (!entries.contains(required)) {
-                throw new GradleException("Missing required relocated bStats class: ${required}")
-            }
-        }
-        if (entries.any { it.startsWith('org/bstats/') }) {
-            throw new GradleException('Unrelocated org/bstats classes found in the release JAR')
-        }
-    }
-}
-
-tasks.named('build') { dependsOn verifyBStatsLayout }
