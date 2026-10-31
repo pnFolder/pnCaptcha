@@ -3,7 +3,6 @@ package ru.privatenull.pncaptcha
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.connection.DisconnectEvent
-import com.velocitypowered.api.event.connection.PostLoginEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
 import com.velocitypowered.api.plugin.Dependency
@@ -13,7 +12,7 @@ import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
-import org.bstats.velocity.Metrics
+import org.pnfolder.pnlibrary.velocity.bootstrap.PnLibraryBootstrap
 import org.slf4j.Logger
 import ru.privatenull.pncaptcha.action.ActionService
 import ru.privatenull.pncaptcha.cache.VerificationCache
@@ -22,13 +21,12 @@ import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
 import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.config.CaptchaConfigLoader
 import ru.privatenull.pncaptcha.limbo.CaptchaLimboEnvironment
+import ru.privatenull.pncaptcha.integration.PnLibraryRuntime
 import ru.privatenull.pncaptcha.manager.CaptchaManager
 import ru.privatenull.pncaptcha.message.MessageService
-import ru.privatenull.pncaptcha.metrics.BStatsMetrics
 import ru.privatenull.pncaptcha.routing.ServerRouter
 import ru.privatenull.pncaptcha.security.IpJoinRateLimiter
 import ru.privatenull.pncaptcha.session.CaptchaSessionManager
-import ru.privatenull.pncaptcha.update.UpdateChecker
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -39,22 +37,36 @@ import java.nio.file.Path
     description = "Fully configurable LimboAPI 3D voxel CAPTCHA and smart routing for Velocity",
     url = "https://github.com/pnFolder/pnCaptcha",
     authors = ["PnFolder"],
-    dependencies = [Dependency(id = "limboapi")]
+    dependencies = [Dependency(id = "limboapi"), Dependency(id = "pnlibrary", optional = true)]
 )
 class PnCaptchaPlugin @Inject constructor(
     private val proxy: ProxyServer,
     private val logger: Logger,
-    private val metricsFactory: Metrics.Factory,
     @DataDirectory private val dataDirectory: Path
 ) {
     @Volatile private var manager: CaptchaManager? = null
     private var environment: CaptchaLimboEnvironment? = null
-    private var updateChecker: UpdateChecker? = null
-    private var metrics: BStatsMetrics? = null
+    private var pnRuntime: PnLibraryRuntime? = null
     private var verificationCachePurgeTask: ScheduledTask? = null
 
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
+        val ready = try {
+            PnLibraryBootstrap.ensureInstalled(proxy, this, PnLibraryRuntime.MINIMUM_VERSION)
+        } catch (failure: Throwable) {
+            logger.error("Не удалось автоматически подготовить pnLibrary. pnCaptcha не будет запущен.", failure)
+            false
+        }
+        if (!ready) {
+            logger.error("pnLibrary не готова (если она только что скачана, перезапустите прокси). pnCaptcha не запущен.")
+            return
+        }
+        val runtime = try {
+            PnLibraryRuntime.connect(this, logger, dataDirectory)
+        } catch (failure: Throwable) {
+            logger.error("pnLibrary не удалось подключить к pnCaptcha. pnCaptcha не будет запущен.", failure)
+            return
+        }
         val config = CaptchaConfigLoader.load(dataDirectory)
         Files.deleteIfExists(dataDirectory.resolve("config.properties"))
 
@@ -87,8 +99,13 @@ class PnCaptchaPlugin @Inject constructor(
             actions = actionService
         )
 
-        updateChecker = UpdateChecker(this, proxy, logger, config, VERSION, messageService).also { it.start() }
-        metrics = BStatsMetrics.start(this, metricsFactory, dataDirectory, logger, config)
+        try {
+            runtime.register(config.metrics.enabled, VERSION)
+            pnRuntime = runtime
+        } catch (failure: Throwable) {
+            logger.error("Не удалось зарегистрировать pnCaptcha в pnLibrary. Капча работает без неё.", failure)
+            runCatching { runtime.close() }
+        }
 
         logger.info("pnCaptcha {} initialized. Config: plugins/pncaptcha/config.yml", VERSION)
         logger.info(
@@ -123,11 +140,6 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     @Subscribe
-    fun onPostLogin(event: PostLoginEvent) {
-        updateChecker?.notifyPlayer(event.player)
-    }
-
-    @Subscribe
     fun onDisconnect(event: DisconnectEvent) {
         manager?.onVelocityDisconnect(event.player.uniqueId)
     }
@@ -136,9 +148,10 @@ class PnCaptchaPlugin @Inject constructor(
     fun onProxyShutdown(event: ProxyShutdownEvent) {
         manager?.shutdown()
         manager = null
-        updateChecker = null
-        metrics?.close()
-        metrics = null
+        val closing = pnRuntime
+        pnRuntime = null
+        runCatching { closing?.close() }
+            .onFailure { logger.warn("Не удалось корректно закрыть контекст pnLibrary", it) }
         verificationCachePurgeTask?.cancel()
         verificationCachePurgeTask = null
         environment?.close()
@@ -155,6 +168,6 @@ class PnCaptchaPlugin @Inject constructor(
     }
 
     companion object {
-        const val VERSION = "1.2.3"
+        const val VERSION = "1.2.4"
     }
 }
