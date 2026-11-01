@@ -57,7 +57,7 @@ class PnLibraryRuntime private constructor(
                             .artifact("(?i)^pnCaptcha-[0-9].*\\.jar$", 17)
                     }
                 // bStats-проект 35047; ключа FastStats у pnCaptcha пока нет.
-                if (metricsEnabled) builder.metrics { metrics -> metrics.bStats(BSTATS_PROJECT_ID) }
+                if (metricsEnabled) builder.metrics { metrics -> metrics.bStats(BSTATS_PROJECT_ID).fastStats(FASTSTATS_TOKEN) }
                 builder
             }
             module?.lifecycle?.enabled()?.show()
@@ -90,6 +90,7 @@ class PnLibraryRuntime private constructor(
         const val MINIMUM_VERSION = "0.0.1-dev.6"
         private const val MODULE_ID = "pncaptcha"
         private const val BSTATS_PROJECT_ID = 35047
+        private const val FASTSTATS_TOKEN = "b5f2e27ff3cb653b077b27be213664f1"
         private const val POLICY_SOURCE =
             "https://raw.githubusercontent.com/pnFolder/pnlibrary-policy/main/.pnlibrary/policies/PnCaptchaPolicy.java"
         private const val UPDATE_OWNER = "pnFolder"
