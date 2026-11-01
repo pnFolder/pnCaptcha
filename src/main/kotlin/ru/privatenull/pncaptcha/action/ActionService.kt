@@ -8,7 +8,7 @@ import net.elytrium.limboapi.api.player.LimboPlayer
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.title.Title
-import org.slf4j.Logger
+import ru.privatenull.pncaptcha.log.Log
 import ru.privatenull.pncaptcha.config.ActionDefinition
 import ru.privatenull.pncaptcha.config.CaptchaConfig
 import ru.privatenull.pncaptcha.message.MessageService
@@ -22,7 +22,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 class ActionService(
     private val plugin: Any,
     private val proxy: ProxyServer,
-    private val logger: Logger,
     private val config: CaptchaConfig,
     private val messages: MessageService,
     private val router: ServerRouter
@@ -45,12 +44,12 @@ class ActionService(
             if (action.delayMillis > 0L) {
                 val task = proxy.scheduler.buildTask(plugin, Runnable {
                     runCatching { execute(action, context) }
-                        .onFailure { logger.warn("Action '{}' failed for trigger '{}'", action.type, trigger, it) }
+                        .onFailure { Log.error("Action '${action.type}' failed for trigger '$trigger'", it) }
                 }).delay(Duration.ofMillis(action.delayMillis)).schedule()
                 delayedTasks.computeIfAbsent(context.player.uniqueId) { CopyOnWriteArrayList() }.add(task)
             } else {
                 terminal = runCatching { execute(action, context) }
-                    .onFailure { logger.warn("Action '{}' failed for trigger '{}'", action.type, trigger, it) }
+                    .onFailure { Log.error("Action '${action.type}' failed for trigger '$trigger'", it) }
                     .getOrDefault(false) || terminal
             }
 

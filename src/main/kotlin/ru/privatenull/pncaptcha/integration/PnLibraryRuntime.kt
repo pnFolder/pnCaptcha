@@ -2,6 +2,7 @@ package ru.privatenull.pncaptcha.integration
 
 import org.pnfolder.pnlibrary.api.diagnostics.DiagnosticConfiguration
 import org.pnfolder.pnlibrary.api.diagnostics.DiagnosticContainer
+import org.pnfolder.pnlibrary.api.logging.PnLogger
 import org.pnfolder.pnlibrary.api.plugin.ModuleContext
 import org.pnfolder.pnlibrary.api.plugin.PluginRegistration
 import org.pnfolder.pnlibrary.api.remote.PolicyErrorAction
@@ -11,6 +12,7 @@ import org.pnfolder.pnlibrary.api.runtime.PnLibraryIdentity
 import org.pnfolder.pnlibrary.api.runtime.PnLibraryProvider
 import org.pnfolder.pnlibrary.api.updates.UpdateChannel
 import org.slf4j.Logger
+import ru.privatenull.pncaptcha.log.Log
 import java.nio.file.Path
 
 /** Подключение pnCaptcha к общему рантайму pnLibrary: политика, метрики, диагностика и обновления. */
@@ -60,6 +62,7 @@ class PnLibraryRuntime private constructor(
                 if (metricsEnabled) builder.metrics { metrics -> metrics.bStats(BSTATS_PROJECT_ID).fastStats(FASTSTATS_TOKEN) }
                 builder
             }
+            module?.logger?.let { moduleLogger -> Log.attach(moduleSink(moduleLogger)) }
             module?.lifecycle?.enabled()?.show()
         } catch (failure: RuntimeException) {
             closeRegistration()
@@ -70,6 +73,7 @@ class PnLibraryRuntime private constructor(
     override fun close() {
         val closing = module
         module = null
+        Log.attach(null)
         if (closing != null && !closing.isClosed) {
             try {
                 closing.lifecycle.disabled().show()
@@ -78,6 +82,13 @@ class PnLibraryRuntime private constructor(
             }
         }
         closeRegistration()
+    }
+
+    private fun moduleSink(moduleLogger: PnLogger): Log.Sink = object : Log.Sink {
+        override fun info(message: String) = moduleLogger.info(message)
+        override fun success(message: String) = moduleLogger.success(message)
+        override fun warning(message: String) = moduleLogger.warning(message)
+        override fun error(message: String, error: Throwable?) = moduleLogger.error(message, error)
     }
 
     private fun closeRegistration() {

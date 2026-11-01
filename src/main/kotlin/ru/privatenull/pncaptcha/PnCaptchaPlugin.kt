@@ -14,6 +14,8 @@ import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import org.pnfolder.pnlibrary.velocity.bootstrap.PnLibraryBootstrap
 import org.slf4j.Logger
+import ru.privatenull.pncaptcha.log.Log
+import ru.privatenull.pncaptcha.log.Slf4jSink
 import ru.privatenull.pncaptcha.action.ActionService
 import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaFont
@@ -51,20 +53,21 @@ class PnCaptchaPlugin @Inject constructor(
 
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
+        Log.fallback = Slf4jSink(logger)
         val ready = try {
             PnLibraryBootstrap.ensureInstalled(proxy, this, PnLibraryRuntime.MINIMUM_VERSION)
         } catch (failure: Throwable) {
-            logger.error("Не удалось автоматически подготовить pnLibrary. pnCaptcha не будет запущен.", failure)
+            Log.error("Не удалось автоматически подготовить pnLibrary. pnCaptcha не будет запущен.", failure)
             false
         }
         if (!ready) {
-            logger.error("pnLibrary не готова (если она только что скачана, перезапустите прокси). pnCaptcha не запущен.")
+            Log.error("pnLibrary не готова (если она только что скачана, перезапустите прокси). pnCaptcha не запущен.")
             return
         }
         val runtime = try {
             PnLibraryRuntime.connect(this, logger, dataDirectory)
         } catch (failure: Throwable) {
-            logger.error("pnLibrary не удалось подключить к pnCaptcha. pnCaptcha не будет запущен.", failure)
+            Log.error("pnLibrary не удалось подключить к pnCaptcha. pnCaptcha не будет запущен.", failure)
             return
         }
         val config = CaptchaConfigLoader.load(dataDirectory)
@@ -75,7 +78,7 @@ class PnCaptchaPlugin @Inject constructor(
         val limboEnvironment = CaptchaLimboEnvironment(factory, config)
         val messageService = MessageService(config)
         val serverRouter = ServerRouter(proxy, config.routing)
-        val actionService = ActionService(this, proxy, logger, config, messageService, serverRouter)
+        val actionService = ActionService(this, proxy, config, messageService, serverRouter)
         val sessionManager = CaptchaSessionManager()
         val verificationCache = VerificationCache(config.verifiedCacheTtl)
         verificationCachePurgeTask = proxy.scheduler.buildTask(this, Runnable {
@@ -87,7 +90,6 @@ class PnCaptchaPlugin @Inject constructor(
         manager = CaptchaManager(
             plugin = this,
             proxy = proxy,
-            logger = logger,
             config = config,
             environment = limboEnvironment,
             generator = CaptchaGenerator(font.alphabet),
@@ -103,34 +105,22 @@ class PnCaptchaPlugin @Inject constructor(
             runtime.register(config.metrics.enabled, VERSION)
             pnRuntime = runtime
         } catch (failure: Throwable) {
-            logger.error("Не удалось зарегистрировать pnCaptcha в pnLibrary. Капча работает без неё.", failure)
+            Log.error("Не удалось зарегистрировать pnCaptcha в pnLibrary. Капча работает без неё.", failure)
             runCatching { runtime.close() }
         }
 
-        logger.info("pnCaptcha {} initialized. Config: plugins/pncaptcha/config.yml", VERSION)
-        logger.info(
-            "Routing: strategy={}, configured servers={}, network max={}, reserve={}",
-            config.routing.strategy,
-            serverRouter.configuredServerCount(),
-            config.routing.networkMaxPlayers,
-            config.routing.networkReserveSlots
+        Log.info("pnCaptcha $VERSION initialized. Config: plugins/pncaptcha/config.yml")
+        Log.info(
+            "Routing: strategy=${config.routing.strategy}, configured servers=${serverRouter.configuredServerCount()}, " +
+                "network max=${config.routing.networkMaxPlayers}, reserve=${config.routing.networkReserveSlots}"
         )
-        logger.info(
-            "3D: distance={}, yaw/pitch/roll={}/{}/{}, voxel={}x{}x{}, front/back={}/{}, font={} {}x{}, Limbo view/sim={}/{}",
-            config.scene.distanceBlocks,
-            config.scene.rotationYawDegrees,
-            config.scene.rotationPitchDegrees,
-            config.scene.rotationRollDegrees,
-            config.geometry.pixelWidth,
-            config.geometry.pixelHeight,
-            config.geometry.depthBlocks,
-            config.geometry.frontThicknessBlocks,
-            config.geometry.backThicknessBlocks,
-            config.font.preset,
-            font.width,
-            font.height,
-            config.limbo.viewDistance,
-            config.limbo.simulationDistance
+        Log.info(
+            "3D: distance=${config.scene.distanceBlocks}, " +
+                "yaw/pitch/roll=${config.scene.rotationYawDegrees}/${config.scene.rotationPitchDegrees}/${config.scene.rotationRollDegrees}, " +
+                "voxel=${config.geometry.pixelWidth}x${config.geometry.pixelHeight}x${config.geometry.depthBlocks}, " +
+                "front/back=${config.geometry.frontThicknessBlocks}/${config.geometry.backThicknessBlocks}, " +
+                "font=${config.font.preset} ${font.width}x${font.height}, " +
+                "Limbo view/sim=${config.limbo.viewDistance}/${config.limbo.simulationDistance}"
         )
     }
 
@@ -151,7 +141,7 @@ class PnCaptchaPlugin @Inject constructor(
         val closing = pnRuntime
         pnRuntime = null
         runCatching { closing?.close() }
-            .onFailure { logger.warn("Не удалось корректно закрыть контекст pnLibrary", it) }
+            .onFailure { Log.warning("Не удалось корректно закрыть контекст pnLibrary", it) }
         verificationCachePurgeTask?.cancel()
         verificationCachePurgeTask = null
         environment?.close()

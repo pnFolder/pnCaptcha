@@ -5,7 +5,7 @@ import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import net.elytrium.limboapi.api.player.LimboPlayer
-import org.slf4j.Logger
+import ru.privatenull.pncaptcha.log.Log
 import ru.privatenull.pncaptcha.action.ActionService
 import ru.privatenull.pncaptcha.cache.VerificationCache
 import ru.privatenull.pncaptcha.captcha.CaptchaGenerator
@@ -26,7 +26,6 @@ import kotlin.math.sqrt
 class CaptchaManager(
     private val plugin: Any,
     private val proxy: ProxyServer,
-    private val logger: Logger,
     private val config: CaptchaConfig,
     private val environment: CaptchaLimboEnvironment,
     private val generator: CaptchaGenerator,
@@ -101,20 +100,20 @@ class CaptchaManager(
                     player = player,
                     handler = CaptchaSessionHandler(this, player.uniqueId, session.id)
                 )
-                logger.info(
-                    "CAPTCHA {} for {}: {} blocks, chunks X {}..{}, Z {}..{}, view/sim={}/{}, yaw/pitch/roll={}/{}/{}",
-                    session.id.toString().take(8), player.username, info.blockCount,
-                    info.chunkBounds.minX, info.chunkBounds.maxX, info.chunkBounds.minZ, info.chunkBounds.maxZ,
-                    info.viewDistance, info.simulationDistance,
-                    "%.2f".format(info.scene.rotationYawDegrees),
-                    "%.2f".format(info.scene.rotationPitchDegrees),
-                    "%.2f".format(info.scene.rotationRollDegrees)
+                Log.info(
+                    "CAPTCHA ${session.id.toString().take(8)} for ${player.username}: ${info.blockCount} blocks, " +
+                        "chunks X ${info.chunkBounds.minX}..${info.chunkBounds.maxX}, " +
+                        "Z ${info.chunkBounds.minZ}..${info.chunkBounds.maxZ}, " +
+                        "view/sim=${info.viewDistance}/${info.simulationDistance}, " +
+                        "yaw/pitch/roll=${"%.2f".format(info.scene.rotationYawDegrees)}/" +
+                        "${"%.2f".format(info.scene.rotationPitchDegrees)}/" +
+                        "${"%.2f".format(info.scene.rotationRollDegrees)}"
                 )
             } catch (throwable: Throwable) {
                 sessions.remove(player.uniqueId, session.id)
                 actions.cleanup(player.uniqueId)
                 environment.dispose(session.id)
-                logger.error("Failed to build/spawn CAPTCHA Limbo for {}", player.username, throwable)
+                Log.error("Failed to build/spawn CAPTCHA Limbo for ${player.username}", throwable)
                 val terminal = actions.fire(
                     "unavailable",
                     ActionService.Context(player = player, sessionId = session.id, captcha = session.answer)
@@ -204,7 +203,7 @@ class CaptchaManager(
     private fun complete(session: CaptchaSession, proxyPlayer: Player, limboPlayer: LimboPlayer) {
         val target = router.select()
         if (target == null) {
-            logger.error("No configured routing server is available")
+            Log.error("No configured routing server is available")
             val terminal = actions.fire("route-unavailable", context(session, limboPlayer))
             if (!terminal) proxyPlayer.disconnect(messages.component(config.messages.routeUnavailable))
             cleanup(session, delayedDispose = true)
