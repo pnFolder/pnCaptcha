@@ -2,7 +2,10 @@ package ru.privatenull.pncaptcha.manager
 
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
-import com.velocitypowered.api.scheduler.ScheduledTask
+import org.pnfolder.pnlibrary.api.cooldowns.CooldownService
+import org.pnfolder.pnlibrary.api.tasks.TaskHandle
+import org.pnfolder.pnlibrary.api.tasks.TaskScope
+import ru.privatenull.pncaptcha.integration.later
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import net.elytrium.limboapi.api.player.LimboPlayer
 import ru.privatenull.pncaptcha.log.Log
@@ -24,7 +27,8 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.sqrt
 
 class CaptchaManager(
-    private val plugin: Any,
+    private val tasks: TaskScope,
+    private val cooldowns: CooldownService,
     private val proxy: ProxyServer,
     private val config: CaptchaConfig,
     private val environment: CaptchaLimboEnvironment,
@@ -36,9 +40,8 @@ class CaptchaManager(
     private val router: ServerRouter,
     private val actions: ActionService
 ) {
-    private val timeoutTasks = ConcurrentHashMap<UUID, ScheduledTask>()
-    private val disposeTasks = ConcurrentHashMap<UUID, ScheduledTask>()
-    private val lastRecoveryAt = ConcurrentHashMap<UUID, Long>()
+    private val timeoutTasks = ConcurrentHashMap<UUID, TaskHandle>()
+    private val disposeTasks = ConcurrentHashMap<UUID, TaskHandle>()
     private val beginLock = Any()
 
     fun register(event: LoginLimboRegisterEvent) {
@@ -89,7 +92,7 @@ class CaptchaManager(
                 actions.cleanup(player.uniqueId)
                 environment.dispose(stale.id)
             }
-            lastRecoveryAt.remove(player.uniqueId)
+            cooldowns.reset(player.uniqueId, RECOVERY_COOLDOWN)
 
             val session = sessions.create(CaptchaSession(playerId = player.uniqueId, answer = generator.generate(config.captchaLength)))
 
@@ -122,10 +125,7 @@ class CaptchaManager(
                 return
             }
 
-            timeoutTasks[player.uniqueId] = proxy.scheduler
-                .buildTask(plugin, Runnable { timeout(player.uniqueId, session.id) })
-                .delay(config.timeout)
-                .schedule()
+            timeoutTasks[player.uniqueId] = tasks.later("pncaptcha-timeout", config.timeout, Runnable { timeout(player.uniqueId, session.id) })
         }
     }
 
@@ -218,7 +218,7 @@ class CaptchaManager(
         cache.markVerified(proxyPlayer)
         sessions.remove(session.playerId, session.id)
         timeoutTasks.remove(session.playerId)?.cancel()
-        lastRecoveryAt.remove(session.playerId)
+        cooldowns.reset(session.playerId, RECOVERY_COOLDOWN)
         actions.cleanup(session.playerId)
         session.limboPlayer = null
 
@@ -257,10 +257,7 @@ class CaptchaManager(
             else -> null
         } ?: return
 
-        val now = System.currentTimeMillis()
-        val previous = lastRecoveryAt[playerId] ?: 0L
-        if (now - previous < config.player.recovery.cooldownMillis) return
-        lastRecoveryAt[playerId] = now
+        if (!cooldowns.acquire(playerId, RECOVERY_COOLDOWN, Duration.ofMillis(config.player.recovery.cooldownMillis)).allowed) return
 
         teleportToCamera(sessionId, limboPlayer, yaw, pitch)
         val placeholders = mapOf("reason" to reason)
@@ -272,7 +269,7 @@ class CaptchaManager(
     fun onDisconnect(playerId: UUID, sessionId: UUID) {
         val session = sessions.remove(playerId, sessionId) ?: return
         timeoutTasks.remove(playerId)?.cancel()
-        lastRecoveryAt.remove(playerId)
+        cooldowns.reset(playerId, RECOVERY_COOLDOWN)
         actions.cleanup(playerId)
         session.limboPlayer = null
         environment.dispose(session.id)
@@ -281,7 +278,7 @@ class CaptchaManager(
     fun onVelocityDisconnect(playerId: UUID) {
         val session = sessions.remove(playerId)
         timeoutTasks.remove(playerId)?.cancel()
-        lastRecoveryAt.remove(playerId)
+        cooldowns.reset(playerId, RECOVERY_COOLDOWN)
         actions.cleanup(playerId)
         if (session != null) {
             session.limboPlayer = null
@@ -343,7 +340,7 @@ class CaptchaManager(
     private fun cleanup(session: CaptchaSession, delayedDispose: Boolean) {
         sessions.remove(session.playerId, session.id)
         timeoutTasks.remove(session.playerId)?.cancel()
-        lastRecoveryAt.remove(session.playerId)
+        cooldowns.reset(session.playerId, RECOVERY_COOLDOWN)
         actions.cleanup(session.playerId)
         session.limboPlayer = null
         if (delayedDispose) scheduleDispose(session.id) else environment.dispose(session.id)
@@ -351,12 +348,10 @@ class CaptchaManager(
 
     private fun scheduleDispose(sessionId: UUID) {
         disposeTasks.remove(sessionId)?.cancel()
-        val task = proxy.scheduler.buildTask(plugin, Runnable {
+        val task = tasks.later("pncaptcha-dispose", DISPOSE_DELAY, Runnable {
             disposeTasks.remove(sessionId)
             environment.dispose(sessionId)
         })
-            .delay(DISPOSE_DELAY)
-            .schedule()
         disposeTasks[sessionId] = task
     }
 
@@ -371,16 +366,17 @@ class CaptchaManager(
     }
 
     fun shutdown() {
-        timeoutTasks.values.forEach(ScheduledTask::cancel)
+        timeoutTasks.values.forEach(TaskHandle::cancel)
         timeoutTasks.clear()
-        disposeTasks.values.forEach(ScheduledTask::cancel)
+        disposeTasks.values.forEach(TaskHandle::cancel)
         disposeTasks.clear()
-        lastRecoveryAt.clear()
+        cooldowns.clear()
         actions.shutdown()
         sessions.clear()
     }
 
     companion object {
         private val DISPOSE_DELAY: Duration = Duration.ofSeconds(2)
+        private const val RECOVERY_COOLDOWN = "recovery"
     }
 }

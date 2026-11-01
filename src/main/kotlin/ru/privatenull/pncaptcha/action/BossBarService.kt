@@ -2,7 +2,9 @@ package ru.privatenull.pncaptcha.action
 
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
-import com.velocitypowered.api.scheduler.ScheduledTask
+import org.pnfolder.pnlibrary.api.tasks.TaskHandle
+import org.pnfolder.pnlibrary.api.tasks.TaskScope
+import ru.privatenull.pncaptcha.integration.repeat
 import net.kyori.adventure.bossbar.BossBar
 import ru.privatenull.pncaptcha.config.ActionDefinition
 import ru.privatenull.pncaptcha.message.MessageService
@@ -12,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
 
 class BossBarService(
-    private val plugin: Any,
+    private val tasks: TaskScope,
     private val proxy: ProxyServer,
     private val messages: MessageService
 ) {
@@ -106,10 +108,7 @@ class BossBarService(
                 return
             }
 
-            state.task = proxy.scheduler
-                .buildTask(plugin, Runnable { tick(key, state) })
-                .repeat(Duration.ofMillis(interval))
-                .schedule()
+            state.task = tasks.repeat("pncaptcha-bossbar", Duration.ofMillis(interval), Runnable { tick(key, state) })
         }
     }
 
@@ -321,7 +320,7 @@ class BossBarService(
         val player: Player,
         val bar: BossBar,
         var visible: Boolean,
-        var task: ScheduledTask? = null,
+        var task: TaskHandle? = null,
         var animation: Animation? = null
     )
 

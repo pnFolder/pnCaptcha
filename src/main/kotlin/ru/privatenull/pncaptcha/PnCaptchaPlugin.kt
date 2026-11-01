@@ -9,7 +9,8 @@ import com.velocitypowered.api.plugin.Dependency
 import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
-import com.velocitypowered.api.scheduler.ScheduledTask
+import org.pnfolder.pnlibrary.api.tasks.TaskHandle
+import ru.privatenull.pncaptcha.integration.repeat
 import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import org.pnfolder.pnlibrary.velocity.bootstrap.PnLibraryBootstrap
@@ -49,7 +50,7 @@ class PnCaptchaPlugin @Inject constructor(
     @Volatile private var manager: CaptchaManager? = null
     private var environment: CaptchaLimboEnvironment? = null
     private var pnRuntime: PnLibraryRuntime? = null
-    private var verificationCachePurgeTask: ScheduledTask? = null
+    private var verificationCachePurgeTask: TaskHandle? = null
 
     @Subscribe
     fun onProxyInitialize(event: ProxyInitializeEvent) {
@@ -73,22 +74,33 @@ class PnCaptchaPlugin @Inject constructor(
         val config = CaptchaConfigLoader.load(dataDirectory)
         Files.deleteIfExists(dataDirectory.resolve("config.properties"))
 
+        try {
+            runtime.register(config.metrics.enabled, VERSION)
+            pnRuntime = runtime
+        } catch (failure: Throwable) {
+            Log.error("Не удалось зарегистрировать pnCaptcha в pnLibrary. pnCaptcha не будет запущен.", failure)
+            runCatching { runtime.close() }
+            return
+        }
+        val module = runtime.context
+
         val font = CaptchaFont.resolve(config.font)
         val factory = resolveLimboFactory()
         val limboEnvironment = CaptchaLimboEnvironment(factory, config)
         val messageService = MessageService(config)
         val serverRouter = ServerRouter(proxy, config.routing)
-        val actionService = ActionService(this, proxy, config, messageService, serverRouter)
+        val actionService = ActionService(module.tasks, proxy, config, messageService, serverRouter)
         val sessionManager = CaptchaSessionManager()
         val verificationCache = VerificationCache(config.verifiedCacheTtl)
-        verificationCachePurgeTask = proxy.scheduler.buildTask(this, Runnable {
+        verificationCachePurgeTask = module.tasks.repeat("pncaptcha-cache-purge", java.time.Duration.ofMinutes(1), Runnable {
             verificationCache.purgeExpired()
-        }).repeat(java.time.Duration.ofMinutes(1)).schedule()
+        })
         val rateLimiter = IpJoinRateLimiter(config.maxJoinsPerWindow, config.joinWindow)
 
         environment = limboEnvironment
         manager = CaptchaManager(
-            plugin = this,
+            tasks = module.tasks,
+            cooldowns = module.cooldowns,
             proxy = proxy,
             config = config,
             environment = limboEnvironment,
@@ -100,14 +112,6 @@ class PnCaptchaPlugin @Inject constructor(
             router = serverRouter,
             actions = actionService
         )
-
-        try {
-            runtime.register(config.metrics.enabled, VERSION)
-            pnRuntime = runtime
-        } catch (failure: Throwable) {
-            Log.error("Не удалось зарегистрировать pnCaptcha в pnLibrary. Капча работает без неё.", failure)
-            runCatching { runtime.close() }
-        }
 
         Log.info("pnCaptcha $VERSION initialized. Config: plugins/pncaptcha/config.yml")
         Log.info(

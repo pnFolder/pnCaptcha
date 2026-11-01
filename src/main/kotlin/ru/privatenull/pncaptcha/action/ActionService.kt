@@ -2,12 +2,14 @@ package ru.privatenull.pncaptcha.action
 
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
-import com.velocitypowered.api.scheduler.ScheduledTask
 import net.elytrium.limboapi.api.player.GameMode
 import net.elytrium.limboapi.api.player.LimboPlayer
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.title.Title
+import org.pnfolder.pnlibrary.api.tasks.TaskHandle
+import org.pnfolder.pnlibrary.api.tasks.TaskScope
+import ru.privatenull.pncaptcha.integration.later
 import ru.privatenull.pncaptcha.log.Log
 import ru.privatenull.pncaptcha.config.ActionDefinition
 import ru.privatenull.pncaptcha.config.CaptchaConfig
@@ -20,14 +22,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 class ActionService(
-    private val plugin: Any,
+    private val tasks: TaskScope,
     private val proxy: ProxyServer,
     private val config: CaptchaConfig,
     private val messages: MessageService,
     private val router: ServerRouter
 ) {
-    private val bossBars = BossBarService(plugin, proxy, messages)
-    private val delayedTasks = ConcurrentHashMap<UUID, CopyOnWriteArrayList<ScheduledTask>>()
+    private val bossBars = BossBarService(tasks, proxy, messages)
+    private val delayedTasks = ConcurrentHashMap<UUID, CopyOnWriteArrayList<TaskHandle>>()
 
     fun fire(trigger: String, context: Context): Boolean {
         if (!config.actions.enabled) return false
@@ -42,10 +44,10 @@ class ActionService(
             ) continue
 
             if (action.delayMillis > 0L) {
-                val task = proxy.scheduler.buildTask(plugin, Runnable {
+                val task = tasks.later("pncaptcha-action", Duration.ofMillis(action.delayMillis), Runnable {
                     runCatching { execute(action, context) }
                         .onFailure { Log.error("Action '${action.type}' failed for trigger '$trigger'", it) }
-                }).delay(Duration.ofMillis(action.delayMillis)).schedule()
+                })
                 delayedTasks.computeIfAbsent(context.player.uniqueId) { CopyOnWriteArrayList() }.add(task)
             } else {
                 terminal = runCatching { execute(action, context) }
@@ -61,12 +63,12 @@ class ActionService(
 
     fun cleanup(playerId: UUID) {
         bossBars.cleanup(playerId)
-        delayedTasks.remove(playerId)?.forEach(ScheduledTask::cancel)
+        delayedTasks.remove(playerId)?.forEach(TaskHandle::cancel)
     }
 
     fun shutdown() {
         bossBars.shutdown()
-        delayedTasks.values.flatten().forEach(ScheduledTask::cancel)
+        delayedTasks.values.flatten().forEach(TaskHandle::cancel)
         delayedTasks.clear()
     }
 

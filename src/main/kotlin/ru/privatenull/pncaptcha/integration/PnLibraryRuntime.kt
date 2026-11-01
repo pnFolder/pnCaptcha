@@ -25,6 +25,9 @@ class PnLibraryRuntime private constructor(
     private var registration: PluginRegistration? = null
     private var module: ModuleContext? = null
 
+    /** Планировщик и кулдауны модуля; доступны только после [register]. */
+    val context: ModuleContext get() = checkNotNull(module) { "pnCaptcha ещё не зарегистрирован в pnLibrary" }
+
     fun register(metricsEnabled: Boolean, version: String) {
         check(registration == null) { "pnCaptcha уже зарегистрирован в pnLibrary" }
         val registered = runtime.plugins.register(owner)
