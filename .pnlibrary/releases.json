@@ -1,5 +1,29 @@
 {
   "schema": 1,
   "product": "pncaptcha",
-  "releases": []
+  "releases": [
+    {
+      "version": "1.2.4",
+      "channel": "stable",
+      "description": "Подключение к pnLibrary 0.0.1-dev.6: обновления, диагностика, метрики и единый журнал.",
+      "changelogUrl": "https://github.com/PnFolder/pnCaptcha/blob/main/.pnlibrary/changelogs/1.2.4.md",
+      "publishedAt": "2026-11-01T20:53:20Z",
+      "api": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "artifacts": [
+        {
+          "file": "pnCaptcha-1.2.4-velocity-java21.jar",
+          "platform": "VELOCITY",
+          "java": {
+            "minimum": 21
+          },
+          "url": "https://github.com/PnFolder/pnCaptcha/releases/download/v1.2.4/pnCaptcha-1.2.4-velocity-java21.jar",
+          "sha256": "563851a6d9f1773f7a5a729cad495d56f9496f3744931bb31f416234bbb05c22",
+          "size": 2889065
+        }
+      ]
+    }
+  ]
 }
