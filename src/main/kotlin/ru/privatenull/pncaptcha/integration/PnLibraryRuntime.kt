@@ -101,7 +101,7 @@ class PnLibraryRuntime private constructor(
     }
 
     companion object {
-        const val MINIMUM_VERSION = "0.0.1-dev.6"
+        const val MINIMUM_VERSION = "0.1.0-dev.6"
         private const val MODULE_ID = "pncaptcha"
         private const val BSTATS_PROJECT_ID = 35047
         private const val FASTSTATS_TOKEN = "b5f2e27ff3cb653b077b27be213664f1"
