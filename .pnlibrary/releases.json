@@ -3,6 +3,29 @@
   "product": "pncaptcha",
   "releases": [
     {
+      "version": "1.3.0",
+      "channel": "stable",
+      "description": "Переход на pnLibrary 0.1.0-dev.6 (API 2): нужна новая библиотека.",
+      "changelogUrl": "https://github.com/PnFolder/pnCaptcha/blob/main/.pnlibrary/changelogs/1.3.0.md",
+      "publishedAt": "2026-11-21T16:07:24Z",
+      "api": {
+        "minimum": 2,
+        "maximum": 2
+      },
+      "artifacts": [
+        {
+          "file": "pnCaptcha-1.3.0-velocity-java21.jar",
+          "platform": "VELOCITY",
+          "java": {
+            "minimum": 21
+          },
+          "url": "https://github.com/PnFolder/pnCaptcha/releases/download/v1.3.0/pnCaptcha-1.3.0-velocity-java21.jar",
+          "sha256": "b852c0e177f19bbd25c5a983587f8412f2aa56964acbd0aec3ccaba3c784d02a",
+          "size": 2889266
+        }
+      ]
+    },
+    {
       "version": "1.2.4",
       "channel": "stable",
       "description": "Подключение к pnLibrary 0.0.1-dev.6: обновления, диагностика, метрики и единый журнал.",
